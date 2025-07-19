@@ -357,7 +357,7 @@ export function unflattenOptions(
 export const DEBUG_PREFIX = "debug.";
 
 export async function getRawOptions(): Promise<FlatOptions> {
-  const raw = await browser.storage.sync.get();
+  const raw = await chrome.storage.sync.get();
   // Exclude all tweakables since they are handled completely differently.
   return Object.fromEntries(
     Object.entries(raw).filter(([key]) => !key.startsWith(DEBUG_PREFIX))

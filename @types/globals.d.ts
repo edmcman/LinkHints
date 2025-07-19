@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
+/// <reference types="chrome"/>
 
 declare type Browser = "chrome" | "firefox";
 
@@ -70,7 +71,7 @@ interface Navigator {
 }
 
 // This is used to identify the Vivaldi browser.
-declare namespace browser.tabs {
+declare namespace chrome.tabs {
   export interface Tab {
     vivExtData?: unknown;
   }

@@ -32,10 +32,7 @@ export default (): string =>
       open_in_tab: true,
     },
     background: {
-      scripts: [
-        config.needsPolyfill ? config.polyfill.output : undefined,
-        config.background.output,
-      ].filter((script) => script !== undefined),
+      scripts: [config.background.output],
     },
     content_scripts: [
       {
@@ -43,24 +40,12 @@ export default (): string =>
         all_frames: true,
         match_about_blank: true,
         run_at: "document_start",
-        js: [
-          config.needsPolyfill ? config.polyfill.output : undefined,
-          config.worker.output,
-        ].filter((script) => script !== undefined),
+        js: [config.worker.output],
       },
       {
         matches: ["<all_urls>"],
         run_at: "document_start",
-        js: [
-          // We need to put the polyfill both here and above, because Chrome
-          // does not seem to guarantee the content scripts to run in order.
-          // Each `js` array runs in order, but not the `content_scripts` array
-          // it seems. See: https://github.com/lydell/LinkHints/issues/51
-          // It’s a tiny bit wasteful to load the polyfill twice in the top
-          // frame, but it’s not so bad.
-          config.needsPolyfill ? config.polyfill.output : undefined,
-          config.renderer.output,
-        ].filter((script) => script !== undefined),
+        js: [config.renderer.output],
       },
     ],
   });

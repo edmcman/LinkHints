@@ -58,7 +58,7 @@ export default function Tweakable({
   useEffect(
     () =>
       addListener(
-        browser.storage.onChanged,
+        chrome.storage.onChanged,
         (changes, areaName) => {
           if (areaName === "sync") {
             const didUpdate = Object.keys(changes).some((key) =>
@@ -313,8 +313,8 @@ function TweakableField({
 function save(key: string, value: unknown): void {
   fireAndForget(
     value === undefined
-      ? browser.storage.sync.remove(key)
-      : browser.storage.sync.set({ [key]: value }),
+      ? chrome.storage.sync.remove(key)
+      : chrome.storage.sync.set({ [key]: value }),
     "TweakableField save",
     { key, value }
   );
@@ -370,5 +370,5 @@ export async function saveTweakable(
   data: Record<string, unknown>
 ): Promise<void> {
   const [tweakableData] = partitionTweakable(data);
-  return browser.storage.sync.set(tweakableData);
+  return chrome.storage.sync.set(tweakableData);
 }

@@ -18,7 +18,7 @@ export default class PopupProgram {
 
     this.resets.add(
       addListener(
-        browser.runtime.onMessage,
+        chrome.runtime.onMessage,
         this.onMessage.bind(this),
         "PopupProgram#onMessage"
       )
@@ -42,7 +42,7 @@ export default class PopupProgram {
   sendMessage(message: FromPopup): void {
     log("log", "PopupProgram#sendMessage", message.type, message, this);
     fireAndForget(
-      browser.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
+      chrome.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
       "PopupProgram#sendMessage",
       message
     );
@@ -50,7 +50,7 @@ export default class PopupProgram {
 
   // Technically, `ToWorker` and `ToRenderer` messages (which are part of
   // `FromBackground`) can never appear here, since they are sent using
-  // `browser.tabs.sendMessage` rather than `browser.runtime.sendMessage`.
+  // `chrome.tabs.sendMessage` rather than `chrome.runtime.sendMessage`.
   // Instead, `FromWorker` and `FromRenderer` messages can appear (which are
   // part of `ToBackground`)! That's because a popup counts as a background
   // script, which can receive messages from content scripts. So the
@@ -84,7 +84,7 @@ export default class PopupProgram {
 
     function showError(error: Error | undefined): void {
       errorElement.textContent =
-        error !== undefined ? error.message : "An unknown error ocurred.";
+        error !== undefined ? error.message : "An unknown error occurred.";
     }
 
     const container = (
@@ -112,7 +112,7 @@ export default class PopupProgram {
             type="button"
             className="browser-style"
             onClick={() => {
-              browser.runtime
+              chrome.runtime
                 .openOptionsPage()
                 .then(() => {
                   window.close();
@@ -161,12 +161,12 @@ function wrapMessage(message: FromPopup): ToBackground {
 async function getDebugInfo(): Promise<string> {
   const [browserInfo, platformInfo, storageSync, storageLocal, layoutMap] =
     await Promise.all([
-      typeof browser.runtime.getBrowserInfo === "function"
-        ? browser.runtime.getBrowserInfo()
+      typeof chrome.runtime.getBrowserInfo === "function"
+        ? chrome.runtime.getBrowserInfo()
         : undefined,
-      browser.runtime.getPlatformInfo(),
-      browser.storage.sync.get(),
-      browser.storage.local.get(),
+      chrome.runtime.getPlatformInfo(),
+      chrome.storage.sync.get(),
+      chrome.storage.local.get(),
       navigator.keyboard !== undefined && navigator.keyboard !== null
         ? navigator.keyboard.getLayoutMap()
         : undefined,

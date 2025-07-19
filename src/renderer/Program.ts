@@ -151,7 +151,7 @@ export default class RendererProgram {
 
     this.resets.add(
       addListener(
-        browser.runtime.onMessage,
+        chrome.runtime.onMessage,
         this.onMessage.bind(this),
         "RendererProgram#onMessage"
       ),
@@ -166,7 +166,7 @@ export default class RendererProgram {
     try {
       // Don’t use `this.sendMessage` since it automatically catches and logs
       // errors.
-      await browser.runtime.sendMessage(
+      await chrome.runtime.sendMessage(
         wrapMessage({ type: "RendererScriptAdded" })
       );
     } catch {
@@ -195,7 +195,7 @@ export default class RendererProgram {
     // clean up injected.ts. There does not seem to be any good way of running
     // cleanups when a WebExtension is disabled in Firefox. See:
     // <bugzil.la/1223425>
-    browser.runtime.connect().onDisconnect.addListener(() => {
+    chrome.runtime.connect().onDisconnect.addListener(() => {
       this.stop();
     });
   }
@@ -209,7 +209,7 @@ export default class RendererProgram {
   sendMessage(message: FromRenderer): void {
     log("log", "RendererProgram#sendMessage", message.type, message);
     fireAndForget(
-      browser.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
+      chrome.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
       "RendererProgram#sendMessage",
       message
     );

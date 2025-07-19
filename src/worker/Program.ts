@@ -101,7 +101,7 @@ export default class WorkerProgram {
   async start(): Promise<void> {
     this.resets.add(
       addListener(
-        browser.runtime.onMessage,
+        chrome.runtime.onMessage,
         this.onMessage.bind(this),
         "WorkerProgram#onMessage"
       )
@@ -113,13 +113,13 @@ export default class WorkerProgram {
 
     // See `RendererProgram#start`.
     try {
-      await browser.runtime.sendMessage(
+      await chrome.runtime.sendMessage(
         wrapMessage({ type: "WorkerScriptAdded" })
       );
     } catch {
       return;
     }
-    browser.runtime.connect().onDisconnect.addListener(() => {
+    chrome.runtime.connect().onDisconnect.addListener(() => {
       this.stop();
     });
   }
@@ -136,7 +136,7 @@ export default class WorkerProgram {
   sendMessage(message: FromWorker): void {
     log("log", "WorkerProgram#sendMessage", message.type, message);
     fireAndForget(
-      browser.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
+      chrome.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
       "WorkerProgram#sendMessage",
       message
     );
@@ -459,7 +459,7 @@ export default class WorkerProgram {
         break;
       }
 
-      // Used instead of `browser.tabs.create` in Chrome, to have the opened tab
+      // Used instead of `chrome.tabs.create` in Chrome, to have the opened tab
       // end up in the same position as if you'd clicked a link with the mouse.
       // This technique does not seem to work in Firefox, but it's not needed
       // there anyway (see background/Program.ts).

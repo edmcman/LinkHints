@@ -236,7 +236,7 @@ export function tweakable(
     }
   }
 
-  const loaded = browser.storage.sync
+  const loaded = chrome.storage.sync
     .get(Object.keys(defaults).map((key) => `${keyPrefix}${key}`))
     .then((rawData) => {
       const data = Object.fromEntries(
@@ -256,7 +256,7 @@ export function tweakable(
     });
 
   const unlisten = addListener(
-    browser.storage.onChanged,
+    chrome.storage.onChanged,
     (changes, areaName) => {
       if (areaName === "sync") {
         const data = Object.fromEntries(

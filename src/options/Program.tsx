@@ -175,7 +175,7 @@ export default class OptionsProgram extends Component<Props, State> {
 
     this.resets.add(
       addListener(
-        browser.runtime.onMessage,
+        chrome.runtime.onMessage,
         this.onMessage.bind(this),
         "OptionsProgram#onMessage"
       )
@@ -213,7 +213,7 @@ export default class OptionsProgram extends Component<Props, State> {
   sendMessage(message: FromOptions): void {
     log("log", "OptionsProgram#sendMessage", message.type, message, this);
     fireAndForget(
-      browser.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
+      chrome.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
       "OptionsProgram#sendMessage",
       message
     );
@@ -284,7 +284,7 @@ export default class OptionsProgram extends Component<Props, State> {
 
   async savePerf(): Promise<void> {
     if (!PROD) {
-      await browser.storage.local.set({ perf: this.state.perf });
+      await chrome.storage.local.set({ perf: this.state.perf });
       await this.restorePosition();
     }
   }
@@ -384,7 +384,7 @@ export default class OptionsProgram extends Component<Props, State> {
   }
 
   async resetLocalStorage(): Promise<void> {
-    await browser.storage.local.clear();
+    await chrome.storage.local.clear();
     this.setState({ localStorageCleared: new Date() });
   }
 
@@ -1361,7 +1361,7 @@ export default class OptionsProgram extends Component<Props, State> {
           <div className="Paper">
             <div className="Branding">
               <img
-                src={browser.runtime.getURL(META_ICON)}
+                src={chrome.runtime.getURL(META_ICON)}
                 alt=""
                 className="Branding-image"
               />
@@ -1527,7 +1527,7 @@ export default class OptionsProgram extends Component<Props, State> {
     if (!PROD) {
       if (this.hasRestoredPosition) {
         fireAndForget(
-          browser.storage.local.set({ scrollY: window.scrollY }),
+          chrome.storage.local.set({ scrollY: window.scrollY }),
           "OptionsProgram#onScroll->storage.local.set"
         );
       }
@@ -1538,7 +1538,7 @@ export default class OptionsProgram extends Component<Props, State> {
     if (!PROD) {
       const { expandedPerfTabIds, expandedPerf, expandedDebug } = this.state;
       fireAndForget(
-        browser.storage.local.set({
+        chrome.storage.local.set({
           expandedPerfTabIds,
           expandedPerf,
           expandedDebug,
@@ -1567,7 +1567,7 @@ export default class OptionsProgram extends Component<Props, State> {
         expandedDebug: optional(boolean, false),
         scrollY: optional(number, 0),
       };
-      const data = await browser.storage.local.get(Object.keys(recordProps));
+      const data = await chrome.storage.local.get(Object.keys(recordProps));
       const { scrollY, expandedPerfTabIds, ...state } = decode(
         fieldsAuto(recordProps),
         data

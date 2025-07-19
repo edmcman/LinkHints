@@ -218,38 +218,38 @@ export default class BackgroundProgram {
       await this.restoreTabsPerf();
     }
 
-    const tabs = await browser.tabs.query({});
+    const tabs = await chrome.tabs.query({});
 
     this.resets.add(
       addListener(
-        browser.runtime.onMessage,
+        chrome.runtime.onMessage,
         this.onMessage.bind(this),
         "BackgroundProgram#onMessage"
       ),
       addListener(
-        browser.runtime.onConnect,
+        chrome.runtime.onConnect,
         this.onConnect.bind(this),
         "BackgroundProgram#onConnect"
       ),
       addListener(
-        browser.tabs.onActivated,
+        chrome.tabs.onActivated,
         this.onTabActivated.bind(this),
         "BackgroundProgram#onTabActivated"
       ),
       addListener(
-        browser.tabs.onCreated,
+        chrome.tabs.onCreated,
         this.onTabCreated.bind(this),
         "BackgroundProgram#onTabCreated"
       ),
       addListener(
-        browser.tabs.onUpdated,
+        chrome.tabs.onUpdated,
         this.onTabUpdated.bind(this),
         "BackgroundProgram#onTabUpdated",
         // Chrome doesn’t support filters.
         BROWSER === "firefox" ? { properties: ["status", "pinned"] } : undefined
       ),
       addListener(
-        browser.tabs.onRemoved,
+        chrome.tabs.onRemoved,
         this.onTabRemoved.bind(this),
         "BackgroundProgram#onTabRemoved"
       )
@@ -266,7 +266,7 @@ export default class BackgroundProgram {
     }
 
     fireAndForget(
-      browser.browserAction.setBadgeBackgroundColor({ color: COLOR_BADGE }),
+      chrome.browserAction.setBadgeBackgroundColor({ color: COLOR_BADGE }),
       "BackgroundProgram#start->setBadgeBackgroundColor"
     );
 
@@ -346,10 +346,10 @@ export default class BackgroundProgram {
   }
 
   // This might seem like sending a message to oneself, but
-  // `browser.runtime.sendMessage` seems to only send messages to *other*
+  // `chrome.runtime.sendMessage` seems to only send messages to *other*
   // background scripts, such as the popup script.
   async sendBackgroundMessage(message: FromBackground): Promise<void> {
-    await browser.runtime.sendMessage(message);
+    await chrome.runtime.sendMessage(message);
   }
 
   async sendContentMessage(
@@ -357,8 +357,8 @@ export default class BackgroundProgram {
     { tabId, frameId }: { tabId: number; frameId: number | "all_frames" }
   ): Promise<void> {
     await (frameId === "all_frames"
-      ? browser.tabs.sendMessage(tabId, message)
-      : browser.tabs.sendMessage(tabId, message, { frameId }));
+      ? chrome.tabs.sendMessage(tabId, message)
+      : chrome.tabs.sendMessage(tabId, message, { frameId }));
   }
 
   // Warning: Don’t make this method async! If a new tab gets for example 3
@@ -384,10 +384,7 @@ export default class BackgroundProgram {
   // OptionsScriptAdded and RendererScriptAdded are all triggered very close to
   // each other. An overwrite can cause us to lose `tabState.isOptionsPage`,
   // breaking shortcuts customization.
-  onMessage(
-    message: ToBackground,
-    sender: browser.runtime.MessageSender
-  ): void {
+  onMessage(message: ToBackground, sender: chrome.runtime.MessageSender): void {
     // `info` can be missing when the message comes from for example the popup
     // (which isn’t associated with a tab). The worker script can even load in
     // an `about:blank` frame somewhere when hovering the browserAction!
@@ -459,7 +456,7 @@ export default class BackgroundProgram {
     }
   }
 
-  onConnect(port: browser.runtime.Port): void {
+  onConnect(port: chrome.runtime.Port): void {
     port.onDisconnect.addListener(({ sender }) => {
       const info = sender === undefined ? undefined : makeMessageInfo(sender);
       if (info !== undefined) {
@@ -1205,7 +1202,7 @@ export default class BackgroundProgram {
     // just as if you had clicked the link for real. See: <bugzil.la/1615860>.
     if (t.PREFER_WINDOWS.value) {
       fireAndForget(
-        browser.windows
+        chrome.windows
           .create({
             focused: foreground,
             url,
@@ -1231,7 +1228,7 @@ export default class BackgroundProgram {
       );
     } else {
       fireAndForget(
-        browser.tabs
+        chrome.tabs
           .create({
             active: foreground,
             url,
@@ -1506,7 +1503,7 @@ export default class BackgroundProgram {
           },
           { tabId: info.tabId }
         );
-        // Both uBlock Origin and Adblock Plus use `browser.tabs.insertCSS` with
+        // Both uBlock Origin and Adblock Plus use `chrome.tabs.insertCSS` with
         // `{ display: none !important; }` and `cssOrigin: "user"` to hide
         // elements. I’ve seen Link Hints’ container to be hidden by a
         // `[style*="animation:"]` filter. This makes sure that the container
@@ -1517,7 +1514,7 @@ export default class BackgroundProgram {
         // Also, hide the backdrop of Link Hints’ container (it is a popover),
         // for sites with styles like `::backdrop { background-color: rgba(0, 0, 0, 0.2) }`
         fireAndForget(
-          browser.tabs.insertCSS(info.tabId, {
+          chrome.tabs.insertCSS(info.tabId, {
             code: `${`#${CONTAINER_ID}`.repeat(
               255
             )} { display: block !important; &::backdrop { display: none !important; } }`,
@@ -1619,7 +1616,7 @@ export default class BackgroundProgram {
           tabState2.perf = [];
         }
         if (!PROD) {
-          await browser.storage.local.remove("perf");
+          await chrome.storage.local.remove("perf");
         }
         break;
 
@@ -1948,7 +1945,7 @@ export default class BackgroundProgram {
     }
   }
 
-  onTabCreated(tab: browser.tabs.Tab): void {
+  onTabCreated(tab: chrome.tabs.Tab): void {
     if (tab.id !== undefined) {
       fireAndForget(
         this.updateIcon(tab.id),
@@ -1964,7 +1961,7 @@ export default class BackgroundProgram {
 
   onTabUpdated(
     tabId: number,
-    changeInfo: browser.tabs._OnUpdatedChangeInfo
+    changeInfo: chrome.tabs._OnUpdatedChangeInfo
   ): void {
     if (changeInfo.status !== undefined) {
       fireAndForget(
@@ -2020,7 +2017,7 @@ export default class BackgroundProgram {
     // Check if we’re allowed to execute content scripts on this page.
     if (!enabled) {
       try {
-        await browser.tabs.executeScript(tabId, {
+        await chrome.tabs.executeScript(tabId, {
           code: "",
           runAt: "document_start",
         });
@@ -2033,7 +2030,7 @@ export default class BackgroundProgram {
     const type: IconType = enabled ? "normal" : "disabled";
     const icons = getIcons(type);
     log("log", "BackgroundProgram#updateIcon", tabId, type);
-    await browser.browserAction.setIcon({ path: icons, tabId });
+    await chrome.browserAction.setIcon({ path: icons, tabId });
   }
 
   updateBadge(tabId: number): void {
@@ -2045,7 +2042,7 @@ export default class BackgroundProgram {
     const { hintsState } = tabState;
 
     fireAndForget(
-      browser.browserAction.setBadgeText({
+      chrome.browserAction.setBadgeText({
         text: getBadgeText(hintsState),
         tabId,
       }),
@@ -2063,13 +2060,13 @@ export default class BackgroundProgram {
           typeof defaultStorageSync === "object" &&
           defaultStorageSync !== null
         ) {
-          await browser.storage.sync.clear();
-          await browser.storage.sync.set(defaultStorageSync);
+          await chrome.storage.sync.clear();
+          await chrome.storage.sync.set(defaultStorageSync);
         }
       }
     }
 
-    const info = await browser.runtime.getPlatformInfo();
+    const info = await chrome.runtime.getPlatformInfo();
     const mac = info.os === "mac";
     const defaults = getDefaults({ mac });
     const rawOptions = await getRawOptions();
@@ -2116,8 +2113,8 @@ export default class BackgroundProgram {
         keysToRemove,
         optionsToSet,
       });
-      await browser.storage.sync.remove(keysToRemove);
-      await browser.storage.sync.set(optionsToSet);
+      await chrome.storage.sync.remove(keysToRemove);
+      await chrome.storage.sync.set(optionsToSet);
       await this.updateOptions();
     } catch (errorAny) {
       const error = errorAny as Error;
@@ -2127,7 +2124,7 @@ export default class BackgroundProgram {
 
   async resetOptions(): Promise<void> {
     try {
-      await browser.storage.sync.clear();
+      await chrome.storage.sync.clear();
       await this.updateOptions();
     } catch (errorAny) {
       const error = errorAny as Error;
@@ -2249,7 +2246,7 @@ export default class BackgroundProgram {
         let isActive = false;
         for (const [tabId] of optionsTabState) {
           try {
-            const tab = await browser.tabs.get(tabId);
+            const tab = await chrome.tabs.get(tabId);
             if (tab.active) {
               isActive = true;
               break;
@@ -2259,9 +2256,9 @@ export default class BackgroundProgram {
           }
         }
         if (optionsTabState.length > 0) {
-          await browser.storage.local.set({ optionsPage: isActive });
+          await chrome.storage.local.set({ optionsPage: isActive });
         } else {
-          await browser.storage.local.remove("optionsPage");
+          await chrome.storage.local.remove("optionsPage");
         }
       };
       fireAndForget(run(), "BackgroundProgram#updateOptionsPageData");
@@ -2269,32 +2266,32 @@ export default class BackgroundProgram {
   }
 
   async maybeOpenTutorial(): Promise<void> {
-    const { tutorialShown } = await browser.storage.local.get("tutorialShown");
+    const { tutorialShown } = await chrome.storage.local.get("tutorialShown");
     if (tutorialShown !== true) {
       if (t.PREFER_WINDOWS.value) {
-        await browser.windows.create({
+        await chrome.windows.create({
           focused: true,
           url: META_TUTORIAL,
         });
       } else {
-        await browser.tabs.create({
+        await chrome.tabs.create({
           active: true,
           url: META_TUTORIAL,
         });
       }
-      await browser.storage.local.set({ tutorialShown: true });
+      await chrome.storage.local.set({ tutorialShown: true });
     }
   }
 
   async maybeReopenOptions(): Promise<void> {
     if (!PROD) {
-      const { optionsPage } = await browser.storage.local.get("optionsPage");
+      const { optionsPage } = await chrome.storage.local.get("optionsPage");
       if (typeof optionsPage === "boolean") {
         const isActive = optionsPage;
         const activeTab = await getCurrentTab();
-        await browser.runtime.openOptionsPage();
+        await chrome.runtime.openOptionsPage();
         if (!isActive && activeTab.id !== undefined) {
-          await browser.tabs.update(activeTab.id, { active: true });
+          await chrome.tabs.update(activeTab.id, { active: true });
         }
       }
     }
@@ -2303,7 +2300,7 @@ export default class BackgroundProgram {
   async restoreTabsPerf(): Promise<void> {
     if (!PROD) {
       try {
-        const { perf } = await browser.storage.local.get("perf");
+        const { perf } = await chrome.storage.local.get("perf");
         if (perf !== undefined) {
           this.restoredTabsPerf = decode(TabsPerf, perf);
           log(
@@ -2326,7 +2323,7 @@ export default class BackgroundProgram {
 
 // Copied from: https://stackoverflow.com/a/77047611
 async function getChromiumVariant(): Promise<ChromiumVariant> {
-  const tabs = await browser.tabs.query({
+  const tabs = await chrome.tabs.query({
     active: true,
     currentWindow: true,
   });
@@ -2348,12 +2345,12 @@ function makeEmptyTabState(tabId: number | undefined): TabState {
   if (tabId !== undefined) {
     // This is a really ugly hack. `makeEmptyTabState` is used within
     // `BackgroundProgram#onMessage`. As mentioned over there, that method must
-    // _not_ be async. So instead of waiting for `browser.tabs.get` (returning a
+    // _not_ be async. So instead of waiting for `chrome.tabs.get` (returning a
     // Promise), we just mutate the tab state as soon as possible. This means
     // that code trying to access `tabState.isPinned` right after
     // `makeEmptyTabState` might get the wrong value. At the time of this
     // writing, no code does that so the hack holds.
-    browser.tabs
+    chrome.tabs
       .get(tabId)
       .then((tab) => {
         tabState.isPinned = tab.pinned;
@@ -2440,15 +2437,15 @@ function shouldCombineHintsForClick(element: ElementWithHint): boolean {
 }
 
 async function runContentScripts(
-  tabs: Array<browser.tabs.Tab>
+  tabs: Array<chrome.tabs.Tab>
 ): Promise<Array<Array<unknown>>> {
-  const manifest = browser.runtime.getManifest();
+  const manifest = chrome.runtime.getManifest();
 
   const detailsList =
     manifest.content_scripts === undefined
       ? []
       : manifest.content_scripts
-          .filter((script) => script.matches.includes("<all_urls>"))
+          .filter((script) => script.matches?.includes("<all_urls>"))
           .flatMap((script) =>
             script.js === undefined
               ? []
@@ -2467,7 +2464,7 @@ async function runContentScripts(
           return [];
         }
         try {
-          return (await browser.tabs.executeScript(
+          return (await chrome.tabs.executeScript(
             tab.id,
             details
           )) as Array<unknown>;
@@ -2482,11 +2479,11 @@ async function runContentScripts(
   );
 }
 
-function firefoxWorkaround(tabs: Array<browser.tabs.Tab>): void {
+function firefoxWorkaround(tabs: Array<chrome.tabs.Tab>): void {
   for (const tab of tabs) {
     if (tab.id !== undefined) {
       const message: FromBackground = { type: "FirefoxWorkaround" };
-      browser.tabs.sendMessage(tab.id, message).catch(() => {
+      chrome.tabs.sendMessage(tab.id, message).catch(() => {
         // If `sendMessage` fails it means that there’s no content script
         // listening in that tab. Example:  `about:` pages (where extensions
         // are not allowed to run content scripts). We don’t need to do
@@ -2496,10 +2493,10 @@ function firefoxWorkaround(tabs: Array<browser.tabs.Tab>): void {
   }
 }
 
-async function getCurrentTab(): Promise<browser.tabs.Tab> {
-  const tabs = await browser.tabs.query({
+async function getCurrentTab(): Promise<chrome.tabs.Tab> {
+  const tabs = await chrome.tabs.query({
     active: true,
-    windowId: browser.windows.WINDOW_ID_CURRENT,
+    windowId: chrome.windows.WINDOW_ID_CURRENT,
   });
   if (tabs.length !== 1) {
     throw new Error(
@@ -2513,7 +2510,7 @@ async function getCurrentTab(): Promise<browser.tabs.Tab> {
 async function openNewTabs(tabId: number, urls: Array<string>): Promise<void> {
   const newTabs = await Promise.all(
     urls.map((url) =>
-      browser.tabs.create({
+      chrome.tabs.create({
         active: urls.length === 1,
         url,
         openerTabId: tabId,
@@ -2521,7 +2518,7 @@ async function openNewTabs(tabId: number, urls: Array<string>): Promise<void> {
     )
   );
   if (newTabs.length >= 2 && newTabs[0].id !== undefined) {
-    await browser.tabs.update(newTabs[0].id, { active: true });
+    await chrome.tabs.update(newTabs[0].id, { active: true });
   }
 }
 
@@ -2529,21 +2526,21 @@ async function openNewTabs(tabId: number, urls: Array<string>): Promise<void> {
 async function openNewWindows(urls: Array<string>): Promise<void> {
   const newWindows = await Promise.all(
     urls.map((url) =>
-      browser.windows.create({
+      chrome.windows.create({
         focused: urls.length === 1,
         url,
       })
     )
   );
   if (newWindows.length >= 2 && newWindows[0].id !== undefined) {
-    await browser.windows.update(newWindows[0].id, { focused: true });
+    await chrome.windows.update(newWindows[0].id, { focused: true });
   }
 }
 
 type IconType = "disabled" | "normal";
 
 function getIcons(type: IconType): Record<string, string> {
-  const manifest = browser.runtime.getManifest();
+  const manifest = chrome.runtime.getManifest();
   return Object.fromEntries(
     Object.entries(manifest.browser_action?.default_icon ?? {}).flatMap(
       ([key, value]) => {
@@ -2701,7 +2698,7 @@ function assignHints(
 }
 
 function makeMessageInfo(
-  sender: browser.runtime.MessageSender
+  sender: chrome.runtime.MessageSender
 ): MessageInfo | undefined {
   return sender.tab?.id !== undefined && sender.frameId !== undefined
     ? { tabId: sender.tab.id, frameId: sender.frameId, url: sender.url }
