@@ -1961,7 +1961,7 @@ export default class BackgroundProgram {
 
   onTabUpdated(
     tabId: number,
-    changeInfo: chrome.tabs._OnUpdatedChangeInfo
+    changeInfo: chrome.tabs.OnUpdatedInfo,
   ): void {
     if (changeInfo.status !== undefined) {
       fireAndForget(
@@ -2463,10 +2463,19 @@ async function runContentScripts(
         if (tab.id === undefined) {
           return [];
         }
+
+        // Create a properly typed details object
+        const injectDetails: chrome.tabs.InjectDetails = {
+          file: details.file,
+          allFrames: Boolean(details.allFrames), // Ensure boolean type
+          matchAboutBlank: Boolean(details.matchAboutBlank), // Ensure boolean type
+          runAt: (details.runAt as chrome.tabs.RunAt) || "document_end" // Valid RunAt value
+        };
+
         try {
           return (await chrome.tabs.executeScript(
             tab.id,
-            details
+            injectDetails
           )) as Array<unknown>;
         } catch {
           // If `executeScript` fails it means that the extension is not
