@@ -2465,11 +2465,11 @@ async function runContentScripts(
         }
 
         // Create a properly typed details object
-        const injectDetails: chrome.tabs.InjectDetails = {
+        const injectDetails: chrome.extensionTypes.InjectDetails = {
           file: details.file,
           allFrames: Boolean(details.allFrames), // Ensure boolean type
           matchAboutBlank: Boolean(details.matchAboutBlank), // Ensure boolean type
-          runAt: (details.runAt as chrome.tabs.RunAt) || "document_end" // Valid RunAt value
+          runAt: (details.runAt as chrome.extensionTypes.RunAt) || "document_end" // Valid RunAt value
         };
 
         try {
@@ -2541,7 +2541,7 @@ async function openNewWindows(urls: Array<string>): Promise<void> {
       })
     )
   );
-  if (newWindows.length >= 2 && newWindows[0].id !== undefined) {
+  if (newWindows.length >= 2 && newWindows[0]?.id !== undefined) {
     await chrome.windows.update(newWindows[0].id, { focused: true });
   }
 }
