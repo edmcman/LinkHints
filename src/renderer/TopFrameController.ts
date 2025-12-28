@@ -1,8 +1,8 @@
 /*
  * TopFrameController - Tab State Management
  * 
- * This file contains tab-specific state management logic extracted from BackgroundProgram.
  * Each top-level frame manages its own tab's state independently.
+ * State is lost when the page unloads (accepted design decision).
  */
 
 import huffman from "n-ary-huffman";
@@ -52,15 +52,9 @@ import type {
   ToRenderer,
   ToWorker,
 } from "../shared/messages";
-import {
-  diffOptions,
-  flattenOptions,
-  getDefaults,
-  getRawOptions,
-  Options,
+import type {
   OptionsData,
   PartialOptions,
-  unflattenOptions,
 } from "../shared/options";
 import {
   MAX_PERF_ENTRIES,
@@ -70,6 +64,7 @@ import {
   TimeTracker,
 } from "../shared/perf";
 import { bool, tweakable, unsignedInt } from "../shared/tweakable";
+
 
 import type RendererProgram from "./Program";
 
@@ -164,18 +159,31 @@ type HintInput =
 // Defaults to 0 (the top-level frame).”
 const TOP_FRAME_ID = 0;
 
-const TOP_FRAME_ID = 0;
-
 export const t = {
+  // Some onscreen frames may never respond (if the frame 404s or hasn't loaded
+  // yet), but the parent can't now that. If a frame hasn't reported that it is
+  // alive after this timeout, ignore it.
   FRAME_REPORT_TIMEOUT: unsignedInt(100), // ms
+
+  // Only show the badge “spinner” if the hints are slow.
   BADGE_COLLECTING_DELAY: unsignedInt(300), // ms
+
+  // Roughly how often to update the hints in hints mode. While a lower number
+  // might yield updates faster, that feels very stuttery. Having a somewhat
+  // longer interval feels better.
   UPDATE_INTERVAL: unsignedInt(500), // ms
   UPDATE_MIN_TIMEOUT: unsignedInt(100), // ms
+
+  // How long a matched/activated hint should show as highlighted.
   MATCH_HIGHLIGHT_DURATION: unsignedInt(200), // ms
+
+  // For people with tiling window managers who exclusively use windows rather
+  // than tabs. This changes basically everything that deals with tabs to
+  // instead deal with windows.
   PREFER_WINDOWS: bool(false),
 };
 
-export const tMeta = tweakable("TopFrame", t);
+export const tMeta = tweakable("Background", t);
 
 
 export default class TopFrameController {
@@ -202,398 +210,46 @@ export default class TopFrameController {
 
   sendWorkerMessage(
     message: ToWorker,
-    recipient: { tabId: number; frameId: number | "all_frames" }
+    frameId: number | "all_frames" = "all_frames"
   ): void {
-    log("log", "BackgroundProgram#sendWorkerMessage", message, recipient);
+    log("log", "TopFrameController#sendWorkerMessage", message, frameId);
     fireAndForget(
-      this.sendContentMessage({ type: "ToWorker", message }, recipient),
-      "BackgroundProgram#sendWorkerMessage",
-      message,
-      recipient
-    );
-  }
-
-  sendRendererMessage(message: ToRenderer, { tabId }: { tabId: number }): void {
-    const recipient = { tabId, frameId: TOP_FRAME_ID };
-    log("log", "BackgroundProgram#sendRendererMessage", message, recipient);
-    fireAndForget(
-      this.sendContentMessage({ type: "ToRenderer", message }, recipient),
-      "BackgroundProgram#sendRendererMessage",
-      message,
-      recipient
+      browser.runtime.sendMessage({ type: "ToWorker", message }),
+      "TopFrameController#sendWorkerMessage",
+      message
     );
   }
 
 
-
-  // This might seem like sending a message to oneself, but
-  // `browser.runtime.sendMessage` seems to only send messages to *other*
-  // background scripts, such as the popup script.
-
-    { tabId, frameId }: { tabId: number; frameId: number | "all_frames" }
-  ): Promise<void> {
-    await (frameId === "all_frames"
-      ? browser.tabs.sendMessage(tabId, message)
-      : browser.tabs.sendMessage(tabId, message, { frameId }));
-  }
-
-  // Warning: Don’t make this method async! If a new tab gets for example 3
-  // events in a short time just after being opened, those three events might
-  // overwrite each other. Expected execution:
-  //
-  // 1. Process event1.
-  // 2. Process event2.
-  // 3. Process event3.
-  //
-  // Async execution (for very close events):
-  //
-  // 1. Start processing event1 until the first `await`.
-  // 2. Start processing event2 until the first `await`.
-  // 3. Start processing event3 until the first `await`.
-  // 4. Finish processing event1 (assuming no more `await`s).
-  // 5. Finish processing event2 (assuming no more `await`s).
-  // 6. Finish processing event3 (assuming no more `await`s).
-  //
-  // In the async case, all of the events might try to do `this.state.set()`.
-  //
-  // This happens when opening the Options page: WorkerScriptAdded,
-  // OptionsScriptAdded and RendererScriptAdded are all triggered very close to
-  // each other. An overwrite can cause us to lose `tabState.isOptionsPage`,
-  // breaking shortcuts customization.
-    sender: browser.runtime.MessageSender
-  ): void {
-    // `info` can be missing when the message comes from for example the popup
-    // (which isn’t associated with a tab). The worker script can even load in
-    // an `about:blank` frame somewhere when hovering the browserAction!
-    const info = makeMessageInfo(sender);
-
-    const tabStateRaw =
-      info === undefined ? undefined : this.state;
-    const tabState =
-      tabStateRaw === undefined ? makeEmptyTabState(info?.tabId) : tabStateRaw;
-
-    if (info !== undefined && tabStateRaw === undefined) {
-      const { [info.tabId.toString()]: perf = [] } = this.restoredTabsPerf;
-      tabState.perf = perf;
-      // State updated directly on this.state
-    }
-
-    switch (message.type) {
-      case "FromWorker":
-        if (info !== undefined) {
-          try {
-            this.onWorkerMessage(message.message, info, tabState);
-          } catch (error) {
-            log(
-              "error",
-              "BackgroundProgram#onWorkerMessage",
-              error,
-              message.message,
-              info
-            );
-          }
-        }
-        break;
-
-      case "FromRenderer":
-        if (info !== undefined) {
-          try {
-            this.onRendererMessage(message.message, info, tabState);
-          } catch (error) {
-            log(
-              "error",
-              "BackgroundProgram#onRendererMessage",
-              error,
-              message.message,
-              info
-            );
-          }
-        }
-        break;
-
-      case "FromPopup":
-        fireAndForget(
-          this.onPopupMessage(message.message),
-          "BackgroundProgram#onPopupMessage",
-          message.message,
-          info
-        );
-        break;
-
-      case "FromOptions":
-        if (info !== undefined) {
-          fireAndForget(
-            this.onOptionsMessage(message.message, info, tabState),
-            "BackgroundProgram#onOptionsMessage",
-            message.message,
-            info
-          );
-        }
-        break;
-    }
+  sendRendererMessage(message: ToRenderer): void {
+    log("log", "TopFrameController#sendRendererMessage", message);
+    fireAndForget(
+      browser.runtime.sendMessage({ type: "ToRenderer", message }),
+      "TopFrameController#sendRendererMessage",
+      message
+    );
   }
 
 
-  onWorkerMessage(
-    message: FromWorker,
-    info: MessageInfo,
-    tabState: TabState
-  ): void {
-    log("log", "BackgroundProgram#onWorkerMessage", message, info);
-
-    switch (message.type) {
-      case "WorkerScriptAdded":
-        this.sendWorkerMessage(
-          // Make sure that the added worker script gets the same token as all
-          // other frames in the page. Otherwise the first hints mode won't
-          // reach into any frames.
-          this.makeWorkerState(tabState, { refreshToken: false }),
-          {
-            tabId: info.tabId,
-            frameId: info.frameId,
-          }
-        );
-        break;
-
-      case "KeyboardShortcutMatched":
-        this.onKeyboardShortcut(message.action, info, message.timestamp);
-        break;
-
-      case "NonKeyboardShortcutKeypress":
-        this.handleHintInput(info.tabId, message.timestamp, {
-          type: "Input",
-          keypress: message.keypress,
-        });
-        break;
-
-      case "KeypressCaptured":
-        this.sendOptionsMessage({
-          type: "KeypressCaptured",
-          keypress: message.keypress,
-        });
-        break;
-
-      case "ReportVisibleFrame": {
-        const { hintsState } = tabState;
-        if (hintsState.type !== "Collecting") {
-          return;
-        }
-
-        const { pendingFrames } = hintsState.pendingElements;
-        pendingFrames.answering = Math.max(0, pendingFrames.answering - 1);
-        pendingFrames.collecting += 1;
-        break;
-      }
-
-      case "ReportVisibleElements": {
-        const { hintsState } = tabState;
-        if (hintsState.type !== "Collecting") {
-          return;
-        }
-
-        const elements: Array<ExtendedElementReport> = message.elements.map(
-          (element) => ({
-            ...element,
-            // Move the element index into the `.frame` property. `.index` is set
-            // later (in `this.maybeStartHinting`) and used to map elements in
-            // BackgroundProgram to DOM elements in RendererProgram.
-            index: -1,
-            frame: { id: info.frameId, index: element.index },
-            hidden: false,
-          })
-        );
-
-        hintsState.pendingElements.elements.push(...elements);
-
-        const { pendingFrames } = hintsState.pendingElements;
-        pendingFrames.answering += message.numFrames;
-        pendingFrames.collecting = Math.max(0, pendingFrames.collecting - 1);
-
-        hintsState.stats.push(message.stats);
-
-        if (message.numFrames === 0) {
-          this.maybeStartHinting(info.tabId);
-        } else {
-          pendingFrames.lastStartWaitTimestamp = Date.now();
-          this.setTimeout(info.tabId, t.FRAME_REPORT_TIMEOUT.value);
-        }
-        break;
-      }
-
-      case "ReportUpdatedElements": {
-        const { hintsState } = tabState;
-        if (hintsState.type !== "Hinting") {
-          return;
-        }
-
-        const updatedElementsWithHints = mergeElements(
-          hintsState.elementsWithHints,
-          message.elements,
-          info.frameId
-        );
-
-        const { enteredChars, enteredText } = hintsState;
-
-        const { allElementsWithHints, updates } = updateHints({
-          mode: hintsState.mode,
-          enteredChars,
-          enteredText,
-          elementsWithHints: updatedElementsWithHints,
-          highlighted: hintsState.highlighted,
-          chars: this.options.values.chars,
-          autoActivate: this.options.values.autoActivate,
-          matchHighlighted: false,
-          updateMeasurements: true,
-        });
-
-        hintsState.elementsWithHints = allElementsWithHints;
-
-        this.sendRendererMessage(
-          {
-            type: "UpdateHints",
-            updates,
-            enteredText,
-          },
-          { tabId: info.tabId }
-        );
-
-        this.sendRendererMessage(
-          {
-            type: "RenderTextRects",
-            rects: message.rects,
-            frameId: info.frameId,
-          },
-          { tabId: info.tabId }
-        );
-
-        this.updateBadge(info.tabId);
-
-        if (info.frameId === TOP_FRAME_ID) {
-          const { updateState } = hintsState;
-
-          const now = Date.now();
-          const elapsedTime = now - updateState.lastUpdateStartTimestamp;
-          const timeout = Math.max(
-            t.UPDATE_MIN_TIMEOUT.value,
-            t.UPDATE_INTERVAL.value - elapsedTime
-          );
-
-          log("log", "Scheduling next elements update", {
-            elapsedTime,
-            timeout,
-            UPDATE_INTERVAL: t.UPDATE_INTERVAL.value,
-            UPDATE_MIN_TIMEOUT: t.UPDATE_MIN_TIMEOUT.value,
-          });
-
-          hintsState.updateState = {
-            type: "WaitingForTimeout",
-            lastUpdateStartTimestamp: updateState.lastUpdateStartTimestamp,
-          };
-
-          this.setTimeout(info.tabId, timeout);
-        }
-        break;
-      }
-
-      case "ReportTextRects":
-        this.sendRendererMessage(
-          {
-            type: "RenderTextRects",
-            rects: message.rects,
-            frameId: info.frameId,
-          },
-          { tabId: info.tabId }
-        );
-        break;
-
-      // When clicking a link using the extension that causes a page load (no
-      // `.preventDefault()`, no internal fragment identifier, no `javascript:`
-      // protocol, etc.), exit hints mode. This is especially nice for the
-      // "ManyClick" mode since it makes the hints go away immediately when
-      // clicking the link rather than after a little while when the "pagehide"
-      // event has fired.
-      case "ClickedLinkNavigatingToOtherPage": {
-        const { hintsState } = tabState;
-        if (hintsState.type !== "Idle") {
-          // Exit in “Delayed” mode so that the matched hints still show as
-          // highlighted.
-          this.exitHintsMode({ tabId: info.tabId, delayed: true });
-        }
-        break;
-      }
-
-      // If the user clicks a link while hints mode is active, exit it.
-      // Otherwise you’ll end up in hints mode on the new page (it is still the
-      // same tab, after all) but with no hints. If changing the address bar of
-      // the tab to for example `about:preferences` it is too late to send
-      // message to the content scripts (“Error: Receiving end does not exist”).
-      // Instead, syncing `WorkerProgram`s and unrendering is taken care of
-      // if/when returning to the page via the back button. (See below.)
-      case "TopPageHide": {
-        const { hintsState } = tabState;
-        if (hintsState.type !== "Idle") {
-          this.exitHintsMode({ tabId: info.tabId, sendMessages: false });
-        }
-        break;
-      }
-
-      // When clicking the back button In Firefox, the content scripts of the
-      // previous page aren’t re-run but instead pick up from where they were
-      // when leaving the page. If the user clicked a link while in hints mode
-      // and then pressed the back button, the `tabState` for the tab won’t be
-      // in hints mode, but the content scripts of the page might be out of
-      // sync. They never got any messages saying that hints mode was exited,
-      // and now they pick up from where they were. So after returning to a page
-      // via the back/forward buttons, make sure that the content scripts are in
-      // sync.
-      case "PersistedPageShow":
-        this.sendWorkerMessage(this.makeWorkerState(tabState), {
-          tabId: info.tabId,
-          frameId: "all_frames",
-        });
-        break;
-
-      case "OpenNewTabs":
-        if (BROWSER === "firefox") {
-          fireAndForget(
-            t.PREFER_WINDOWS.value
-              ? openNewWindows(message.urls)
-              : openNewTabs(info.tabId, message.urls),
-            "BackgroundProgram#onWorkerMessage->openNewTabs",
-            message,
-            info
-          );
-        }
-
-        break;
-    }
-  }
-
-  // Instead of doing `setTimeout(doSomething, duration)`, call
-  // `this.setTimeout(tabId, duration)` instead and add
-  // `this.doSomething(tabId)` to `onTimeout` below. Every method called from
-  // `onTimeout` is responsible for checking that everything is in the correct
-  // state and that the correct amount of time has passed. No matter when or
-  // from where or in which state `onTimeout` is called, it should always do the
-  // correct thing. This means that we never have to clear any timeouts, which
-  // is very tricky to keep track of.
-  setTimeout(tabId: number, duration: number): void {
+  setTimeout(duration: number): void {
     setTimeout(() => {
       try {
-        this.onTimeout(tabId);
+        this.onTimeout();
       } catch (error) {
-        log("error", "BackgroundProgram#onTimeout", error, tabId);
+        log("error", "TopFrameController#onTimeout", error);
       }
     }, duration);
   }
 
-  onTimeout(tabId: number): void {
-    this.updateBadge(tabId);
-    this.maybeStartHinting(tabId);
-    this.updateElements(tabId);
-    this.unhighlightHints(tabId);
-    this.stopPreventOvertyping(tabId);
+
+  onTimeout(): void {
+    this.updateBadge();
+    this.maybeStartHinting();
+    this.updateElements();
+    this.unhighlightHints();
+    this.stopPreventOvertyping();
   }
+
 
   getTextRects({
     enteredChars,
@@ -626,11 +282,9 @@ export default class TopFrameController {
     }
   }
 
+
   handleHintInput(tabId: number, timestamp: number, input: HintInput): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const { hintsState } = tabState;
     if (hintsState.type !== "Hinting") {
@@ -763,20 +417,21 @@ export default class TopFrameController {
         type: "Idle",
         highlighted: hintsState.highlighted,
       };
-      this.setTimeout(tabId, t.MATCH_HIGHLIGHT_DURATION.value);
+      this.setTimeout( t.MATCH_HIGHLIGHT_DURATION.value);
       this.updateWorkerStateAfterHintActivation({
         tabId,
         preventOverTyping,
       });
     }
 
-    this.updateBadge(tabId);
+    this.updateBadge();
   }
 
   // Executes some action on the element of the matched hint. Returns whether
   // the "NonKeyboardShortcutKeypress" handler should continue with its default
   // implementation for updating hintsState and sending messages or not. Some
   // hint modes handle that themselves.
+
   handleHintMatch({
     tabId,
     match,
@@ -878,7 +533,7 @@ export default class TopFrameController {
           mode: hintsState.mode,
         });
 
-        this.setTimeout(tabId, t.MATCH_HIGHLIGHT_DURATION.value);
+        this.setTimeout( t.MATCH_HIGHLIGHT_DURATION.value);
 
         return false;
       }
@@ -942,8 +597,8 @@ export default class TopFrameController {
           preventOverTyping,
         });
 
-        this.updateBadge(tabId);
-        this.setTimeout(tabId, t.MATCH_HIGHLIGHT_DURATION.value);
+        this.updateBadge();
+        this.setTimeout( t.MATCH_HIGHLIGHT_DURATION.value);
 
         return false;
       }
@@ -996,11 +651,9 @@ export default class TopFrameController {
     }
   }
 
-  refreshHintsRendering(tabId: number): void {
+
+  refreshHintsRendering(): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const { hintsState } = tabState;
     if (hintsState.type !== "Hinting") {
@@ -1032,8 +685,9 @@ export default class TopFrameController {
       { tabId }
     );
 
-    this.updateBadge(tabId);
+    this.updateBadge();
   }
+
 
   openNewTab({
     url,
@@ -1108,11 +762,9 @@ export default class TopFrameController {
     }
   }
 
-  maybeStartHinting(tabId: number): void {
+
+  maybeStartHinting(): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const { hintsState } = tabState;
     if (hintsState.type !== "Collecting") {
@@ -1223,7 +875,7 @@ export default class TopFrameController {
       tabId,
       frameId: "all_frames",
     });
-    this.setTimeout(tabId, t.UPDATE_INTERVAL.value);
+    this.setTimeout( t.UPDATE_INTERVAL.value);
 
     time.start("render");
     this.sendRendererMessage(
@@ -1234,14 +886,12 @@ export default class TopFrameController {
       },
       { tabId }
     );
-    this.updateBadge(tabId);
+    this.updateBadge();
   }
 
-  updateElements(tabId: number): void {
+
+  updateElements(): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const { hintsState } = tabState;
     if (hintsState.type !== "Hinting") {
@@ -1286,11 +936,9 @@ export default class TopFrameController {
     }
   }
 
+
   hideElements(info: MessageInfo): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const { hintsState } = tabState;
 
@@ -1350,8 +998,9 @@ export default class TopFrameController {
       { tabId: info.tabId }
     );
 
-    this.updateBadge(info.tabId);
+    this.updateBadge();
   }
+
 
   onRendererMessage(
     message: FromRenderer,
@@ -1415,70 +1064,12 @@ export default class TopFrameController {
           },
           ...tabState.perf,
         ].slice(0, MAX_PERF_ENTRIES);
-        this.sendOptionsMessage({
-          type: "PerfUpdate",
-          perf: { [info.tabId]: tabState.perf },
-        });
+        // TODO: Send perf to background if needed
         break;
       }
     }
   }
 
-
-    info: MessageInfo,
-    tabState: TabState
-  ): Promise<void> {
-    log("log", "BackgroundProgram#onOptionsMessage", message, info);
-
-    switch (message.type) {
-      case "OptionsScriptAdded": {
-        tabState.isOptionsPage = true;
-        this.updateOptionsPageData();
-        this.sendOptionsMessage({
-          type: "StateSync",
-          logLevel: log.level,
-          options: this.options,
-        });
-        const perf = Object.fromEntries(
-          Array.from(this.tabState, ([tabId, tabState2]) => [
-            tabId.toString(),
-            tabState2.perf,
-          ])
-        );
-        this.sendOptionsMessage({ type: "PerfUpdate", perf });
-        break;
-      }
-
-      case "SaveOptions":
-        await this.saveOptions(message.partialOptions);
-        this.updateTabsAfterOptionsChange();
-        break;
-
-      case "ResetOptions":
-        await this.resetOptions();
-        this.updateTabsAfterOptionsChange();
-        break;
-
-      case "ResetPerf":
-        for (const tabState2 of this.state.values()) {
-          tabState2.perf = [];
-        }
-        if (!PROD) {
-          await browser.storage.local.remove("perf");
-        }
-        break;
-
-      case "ToggleKeyboardCapture":
-        tabState.keyboardMode = message.capture
-          ? { type: "Capture" }
-          : { type: "FromHintsState" };
-        this.sendWorkerMessage(this.makeWorkerState(tabState), {
-          tabId: info.tabId,
-          frameId: "all_frames",
-        });
-        break;
-    }
-  }
 
   onKeyboardShortcut(
     action: KeyboardAction,
@@ -1487,7 +1078,6 @@ export default class TopFrameController {
   ): void {
     const enterHintsMode = (mode: HintsMode): void => {
       this.enterHintsMode({
-        tabId: info.tabId,
         timestamp,
         mode,
       });
@@ -1519,7 +1109,7 @@ export default class TopFrameController {
         break;
 
       case "ExitHintsMode":
-        this.exitHintsMode({ tabId: info.tabId });
+        this.exitHintsMode();
         break;
 
       case "RotateHintsForward":
@@ -1544,9 +1134,6 @@ export default class TopFrameController {
 
       case "RefreshHints": {
         const tabState = this.state;
-        if (tabState === undefined) {
-          return;
-        }
 
         const { hintsState } = tabState;
         if (hintsState.type !== "Hinting") {
@@ -1565,9 +1152,6 @@ export default class TopFrameController {
 
       case "TogglePeek": {
         const tabState = this.state;
-        if (tabState === undefined) {
-          return;
-        }
 
         const { hintsState } = tabState;
         if (hintsState.type !== "Hinting") {
@@ -1584,7 +1168,7 @@ export default class TopFrameController {
       }
 
       case "Escape":
-        this.exitHintsMode({ tabId: info.tabId });
+        this.exitHintsMode();
         this.sendWorkerMessage(
           { type: "Escape" },
           { tabId: info.tabId, frameId: "all_frames" }
@@ -1618,6 +1202,7 @@ export default class TopFrameController {
     }
   }
 
+
   enterHintsMode({
     tabId,
     timestamp,
@@ -1628,9 +1213,6 @@ export default class TopFrameController {
     mode: HintsMode;
   }): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const time = new TimeTracker();
     time.start("collect");
@@ -1666,29 +1248,25 @@ export default class TopFrameController {
       highlighted: tabState.hintsState.highlighted,
     };
 
-    this.updateBadge(tabId);
-    this.setTimeout(tabId, t.BADGE_COLLECTING_DELAY.value);
+    this.updateBadge();
+    this.setTimeout( t.BADGE_COLLECTING_DELAY.value);
   }
 
+
   exitHintsMode({
-    tabId,
     delayed = false,
     sendMessages = true,
   }: {
-    tabId: number;
     delayed?: boolean;
     sendMessages?: boolean;
-  }): void {
+  } = {}): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     if (sendMessages) {
       if (delayed) {
-        this.setTimeout(tabId, t.MATCH_HIGHLIGHT_DURATION.value);
+        this.setTimeout( t.MATCH_HIGHLIGHT_DURATION.value);
       } else {
-        this.sendRendererMessage({ type: "Unrender" }, { tabId });
+        this.renderer.unrender(); // Direct call instead of message
       }
     }
 
@@ -1704,14 +1282,12 @@ export default class TopFrameController {
       });
     }
 
-    this.updateBadge(tabId);
+    this.updateBadge();
   }
 
-  unhighlightHints(tabId: number): void {
+
+  unhighlightHints(): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const { hintsState } = tabState;
 
@@ -1749,7 +1325,7 @@ export default class TopFrameController {
           { tabId }
         );
         if (refresh) {
-          this.refreshHintsRendering(tabId);
+          this.refreshHintsRendering();
         }
       }
     };
@@ -1760,7 +1336,7 @@ export default class TopFrameController {
       case "Idle":
       case "Collecting":
         if (stillWaiting.length === 0) {
-          this.sendRendererMessage({ type: "Unrender" }, { tabId });
+          this.renderer.unrender(); // Direct call instead of message
         } else {
           hideDoneWaiting();
         }
@@ -1773,11 +1349,9 @@ export default class TopFrameController {
     }
   }
 
-  stopPreventOvertyping(tabId: number): void {
+
+  stopPreventOvertyping(): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const { keyboardMode } = tabState;
     if (
@@ -1794,40 +1368,8 @@ export default class TopFrameController {
   }
 
 
-
-    changeInfo: browser.tabs._OnUpdatedChangeInfo
-  ): void {
-    if (changeInfo.status !== undefined) {
-      fireAndForget(
-        this.updateIcon(tabId),
-        "BackgroundProgram#onTabUpdated->updateIcon",
-        tabId
-      );
-    }
-
+  updateBadge(): void {
     const tabState = this.state;
-    if (tabState !== undefined && changeInfo.status === "loading") {
-      tabState.isOptionsPage = false;
-      this.updateOptionsPageData();
-    }
-
-    if (tabState !== undefined && changeInfo.pinned !== undefined) {
-      tabState.isPinned = changeInfo.pinned;
-      this.sendWorkerMessage(this.makeWorkerState(tabState), {
-        tabId,
-        frameId: "all_frames",
-      });
-    }
-  }
-
-
-
-
-  updateBadge(tabId: number): void {
-    const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     const { hintsState } = tabState;
 
@@ -1839,9 +1381,6 @@ export default class TopFrameController {
       "BackgroundProgram#updateBadge->setBadgeText"
     );
   }
-
-
-
 
 
   makeWorkerState(
@@ -1899,10 +1438,7 @@ export default class TopFrameController {
         };
   }
 
-  // Send a "StateSync" message to WorkerProgram. If a hint was auto-activated
-  // by text filtering, prevent “over-typing” (continued typing after the hint
-  // got matched, before realizing it got matched) by temporarily removing all
-  // keyboard shortcuts and suppressing all key presses for a short time.
+
   updateWorkerStateAfterHintActivation({
     tabId,
     preventOverTyping,
@@ -1911,16 +1447,13 @@ export default class TopFrameController {
     preventOverTyping: boolean;
   }): void {
     const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
     if (preventOverTyping) {
       tabState.keyboardMode = {
         type: "PreventOverTyping",
         sinceTimestamp: Date.now(),
       };
-      this.setTimeout(tabId, this.options.values.overTypingDuration);
+      this.setTimeout( this.options.values.overTypingDuration);
     }
 
     this.sendWorkerMessage(this.makeWorkerState(tabState), {
@@ -1930,9 +1463,9 @@ export default class TopFrameController {
   }
 
 
-
-
 }
+
+// Helper functions
 
 // Copied from: https://stackoverflow.com/a/77047611
 async function getChromiumVariant(): Promise<ChromiumVariant> {
