@@ -224,40 +224,12 @@ export default class TopFrameController {
     );
   }
 
-  sendPopupMessage(message: ToPopup): void {
-    log("log", "BackgroundProgram#sendPopupMessage", message);
-    fireAndForget(
-      this.sendBackgroundMessage({ type: "ToPopup", message }),
-      "BackgroundProgram#sendPopupMessage",
-      message
-    );
-  }
 
-  sendOptionsMessage(message: ToOptions): void {
-    const optionsTabOpen = Array.from(this.tabState).some(
-      ([, tabState]) => tabState.isOptionsPage
-    );
-    // Trying to send a message to Options when no Options tab is open results
-    // in "errors" being logged to the console.
-    if (optionsTabOpen) {
-      log("log", "BackgroundProgram#sendOptionsMessage", message);
-      fireAndForget(
-        this.sendBackgroundMessage({ type: "ToOptions", message }),
-        "BackgroundProgram#sendOptionsMessage",
-        message
-      );
-    }
-  }
 
   // This might seem like sending a message to oneself, but
   // `browser.runtime.sendMessage` seems to only send messages to *other*
   // background scripts, such as the popup script.
-  async sendBackgroundMessage(message: FromBackground): Promise<void> {
-    await browser.runtime.sendMessage(message);
-  }
 
-  async sendContentMessage(
-    message: FromBackground,
     { tabId, frameId }: { tabId: number; frameId: number | "all_frames" }
   ): Promise<void> {
     await (frameId === "all_frames"
@@ -288,8 +260,6 @@ export default class TopFrameController {
   // OptionsScriptAdded and RendererScriptAdded are all triggered very close to
   // each other. An overwrite can cause us to lose `tabState.isOptionsPage`,
   // breaking shortcuts customization.
-  onMessage(
-    message: ToBackground,
     sender: browser.runtime.MessageSender
   ): void {
     // `info` can be missing when the message comes from for example the popup
@@ -363,16 +333,6 @@ export default class TopFrameController {
     }
   }
 
-  onConnect(port: browser.runtime.Port): void {
-    port.onDisconnect.addListener(({ sender }) => {
-      const info = sender === undefined ? undefined : makeMessageInfo(sender);
-      if (info !== undefined) {
-        // A frame was removed. If in hints mode, hide all hints for elements in
-        // that frame.
-        this.hideElements(info);
-      }
-    });
-  }
 
   onWorkerMessage(
     message: FromWorker,
@@ -1464,26 +1424,7 @@ export default class TopFrameController {
     }
   }
 
-  async onPopupMessage(message: FromPopup): Promise<void> {
-    log("log", "BackgroundProgram#log", message);
 
-    switch (message.type) {
-      case "PopupScriptAdded": {
-        const tab = await getCurrentTab();
-        const tabState =
-          tab.id === undefined ? undefined : this.state.get(tab.id);
-        this.sendPopupMessage({
-          type: "Init",
-          logLevel: log.level,
-          isEnabled: tabState !== undefined,
-        });
-        break;
-      }
-    }
-  }
-
-  async onOptionsMessage(
-    message: FromOptions,
     info: MessageInfo,
     tabState: TabState
   ): Promise<void> {
@@ -1852,22 +1793,8 @@ export default class TopFrameController {
     }
   }
 
-  onTabCreated(tab: browser.tabs.Tab): void {
-    if (tab.id !== undefined) {
-      fireAndForget(
-        this.updateIcon(tab.id),
-        "BackgroundProgram#onTabCreated->updateIcon",
-        tab
-      );
-    }
-  }
 
-  onTabActivated(): void {
-    this.updateOptionsPageData();
-  }
 
-  onTabUpdated(
-    tabId: number,
     changeInfo: browser.tabs._OnUpdatedChangeInfo
   ): void {
     if (changeInfo.status !== undefined) {
@@ -1893,52 +1820,8 @@ export default class TopFrameController {
     }
   }
 
-  onTabRemoved(tabId: number): void {
-    this.deleteTabState(tabId);
-  }
 
-  deleteTabState(tabId: number): void {
-    const tabState = this.state;
-    if (tabState === undefined) {
-      return;
-    }
 
-    this.state.delete(tabId);
-
-    if (!tabState.isOptionsPage) {
-      this.sendOptionsMessage({
-        type: "PerfUpdate",
-        perf: { [tabId]: [] },
-      });
-    }
-
-    this.updateOptionsPageData();
-  }
-
-  async updateIcon(tabId: number): Promise<void> {
-    // In Chrome the below check fails for the extension options page, so check
-    // for the options page explicitly.
-    const tabState = this.state;
-    let enabled = tabState !== undefined ? tabState.isOptionsPage : false;
-
-    // Check if we’re allowed to execute content scripts on this page.
-    if (!enabled) {
-      try {
-        await browser.tabs.executeScript(tabId, {
-          code: "",
-          runAt: "document_start",
-        });
-        enabled = true;
-      } catch {
-        enabled = false;
-      }
-    }
-
-    const type: IconType = enabled ? "normal" : "disabled";
-    const icons = getIcons(type);
-    log("log", "BackgroundProgram#updateIcon", tabId, type);
-    await browser.browserAction.setIcon({ path: icons, tabId });
-  }
 
   updateBadge(tabId: number): void {
     const tabState = this.state;
@@ -1957,107 +1840,9 @@ export default class TopFrameController {
     );
   }
 
-  async updateOptions({
-    isInitial = false,
-  }: { isInitial?: boolean } = {}): Promise<void> {
-    if (!PROD) {
-      if (isInitial) {
-        const defaultStorageSync = DEFAULT_STORAGE_SYNC;
-        if (
-          typeof defaultStorageSync === "object" &&
-          defaultStorageSync !== null
-        ) {
-          await browser.storage.sync.clear();
-          await browser.storage.sync.set(defaultStorageSync);
-        }
-      }
-    }
 
-    const info = await browser.runtime.getPlatformInfo();
-    const mac = info.os === "mac";
-    const defaults = getDefaults({ mac });
-    const rawOptions = await getRawOptions();
-    const defaulted = { ...flattenOptions(defaults), ...rawOptions };
-    const [unflattened, map] = unflattenOptions(defaulted);
-    const options = decode(Options, unflattened, map);
 
-    log("log", "BackgroundProgram#updateOptions", {
-      defaults,
-      rawOptions,
-      defaulted,
-      unflattened,
-      options,
-      decodeErrors: [],
-    });
 
-    this.options = {
-      values: options,
-      defaults,
-      raw: rawOptions,
-      errors: [],
-      mac,
-    };
-
-    log.level = options.logLevel;
-  }
-
-  async saveOptions(partialOptions: PartialOptions): Promise<void> {
-    // The options are stored flattened to increase the chance of the browser
-    // sync not overwriting things when options has changed from multiple
-    // places. This means we have to retrieve the whole storage, unflatten it,
-    // merge in the `partialOptions`, flatten that and finally store it. Just
-    // flattening `partialOptions` and storing that would mean that you couldn't
-    // remove any `options.keys`, for example.
-    try {
-      const rawOptions = await getRawOptions();
-      const { keysToRemove, optionsToSet } = diffOptions(
-        flattenOptions(this.options.defaults),
-        flattenOptions({ ...this.options.values, ...partialOptions }),
-        rawOptions
-      );
-      log("log", "BackgroundProgram#saveOptions", {
-        partialOptions,
-        keysToRemove,
-        optionsToSet,
-      });
-      await browser.storage.sync.remove(keysToRemove);
-      await browser.storage.sync.set(optionsToSet);
-      await this.updateOptions();
-    } catch (errorAny) {
-      const error = errorAny as Error;
-      this.options.errors = [error.message];
-    }
-  }
-
-  async resetOptions(): Promise<void> {
-    try {
-      await browser.storage.sync.clear();
-      await this.updateOptions();
-    } catch (errorAny) {
-      const error = errorAny as Error;
-      this.options.errors = [error.message];
-    }
-  }
-
-  updateTabsAfterOptionsChange(): void {
-    this.sendOptionsMessage({
-      type: "StateSync",
-      logLevel: log.level,
-      options: this.options,
-    });
-    for (const tabId of this.state.keys()) {
-      // This also does a "StateSync" for all workers.
-      this.exitHintsMode({ tabId });
-      this.sendRendererMessage(
-        {
-          type: "StateSync",
-          css: this.options.values.css,
-          logLevel: log.level,
-        },
-        { tabId }
-      );
-    }
-  }
 
   makeWorkerState(
     tabState: TabState,
@@ -2144,88 +1929,9 @@ export default class TopFrameController {
     });
   }
 
-  updateOptionsPageData(): void {
-    if (!PROD) {
-      const run = async (): Promise<void> => {
-        const optionsTabState = Array.from(this.tabState).filter(
-          ([, tabState]) => tabState.isOptionsPage
-        );
-        let isActive = false;
-        for (const [tabId] of optionsTabState) {
-          try {
-            const tab = await browser.tabs.get(tabId);
-            if (tab.active) {
-              isActive = true;
-              break;
-            }
-          } catch {
-            // Tab was not found. Try the next one.
-          }
-        }
-        if (optionsTabState.length > 0) {
-          await browser.storage.local.set({ optionsPage: isActive });
-        } else {
-          await browser.storage.local.remove("optionsPage");
-        }
-      };
-      fireAndForget(run(), "BackgroundProgram#updateOptionsPageData");
-    }
-  }
 
-  async maybeOpenTutorial(): Promise<void> {
-    const { tutorialShown } = await browser.storage.local.get("tutorialShown");
-    if (tutorialShown !== true) {
-      if (t.PREFER_WINDOWS.value) {
-        await browser.windows.create({
-          focused: true,
-          url: META_TUTORIAL,
-        });
-      } else {
-        await browser.tabs.create({
-          active: true,
-          url: META_TUTORIAL,
-        });
-      }
-      await browser.storage.local.set({ tutorialShown: true });
-    }
-  }
 
-  async maybeReopenOptions(): Promise<void> {
-    if (!PROD) {
-      const { optionsPage } = await browser.storage.local.get("optionsPage");
-      if (typeof optionsPage === "boolean") {
-        const isActive = optionsPage;
-        const activeTab = await getCurrentTab();
-        await browser.runtime.openOptionsPage();
-        if (!isActive && activeTab.id !== undefined) {
-          await browser.tabs.update(activeTab.id, { active: true });
-        }
-      }
-    }
-  }
 
-  async restoreTabsPerf(): Promise<void> {
-    if (!PROD) {
-      try {
-        const { perf } = await browser.storage.local.get("perf");
-        if (perf !== undefined) {
-          this.restoredTabsPerf = decode(TabsPerf, perf);
-          log(
-            "log",
-            "BackgroundProgram#restoreTabsPerf",
-            this.restoredTabsPerf
-          );
-        }
-      } catch (error) {
-        log(
-          "error",
-          "BackgroundProgram#restoreTabsPerf",
-          "Failed to restore.",
-          error
-        );
-      }
-    }
-  }
 }
 
 // Copied from: https://stackoverflow.com/a/77047611
