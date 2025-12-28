@@ -255,12 +255,10 @@ export default class TopFrameController {
     enteredChars,
     allElementsWithHints,
     words,
-    tabId,
   }: {
     enteredChars: string;
     allElementsWithHints: Array<ElementWithHint>;
     words: Array<string>;
-    tabId: number;
   }): void {
     const indexesByFrame = new Map<number, Array<number>>();
     for (const { text, hint, frame } of allElementsWithHints) {
@@ -276,9 +274,7 @@ export default class TopFrameController {
           type: "GetTextRects",
           indexes,
           words,
-        },
-        { tabId, frameId }
-      );
+        }, frameId);
     }
   }
 
@@ -372,14 +368,12 @@ export default class TopFrameController {
       enteredChars,
       allElementsWithHints,
       words,
-      tabId,
     });
 
     const shouldContinue =
       match === undefined
         ? true
         : this.handleHintMatch({
-            tabId,
             match,
             updates,
             preventOverTyping,
@@ -409,7 +403,7 @@ export default class TopFrameController {
         updates,
         enteredText,
       },
-      { tabId }
+      // tabId not needed in TopFrame context
     );
 
     if (match !== undefined) {
@@ -419,7 +413,6 @@ export default class TopFrameController {
       };
       this.setTimeout( t.MATCH_HIGHLIGHT_DURATION.value);
       this.updateWorkerStateAfterHintActivation({
-        tabId,
         preventOverTyping,
       });
     }
@@ -433,14 +426,12 @@ export default class TopFrameController {
   // hint modes handle that themselves.
 
   handleHintMatch({
-    tabId,
     match,
     updates,
     preventOverTyping,
     alt,
     timestamp,
   }: {
-    tabId: number;
     match: ElementWithHint;
     updates: Array<HintUpdate>;
     preventOverTyping: boolean;
@@ -472,7 +463,6 @@ export default class TopFrameController {
             index: match.frame.index,
           },
           {
-            tabId,
             frameId: match.frame.id,
           }
         );
@@ -486,7 +476,6 @@ export default class TopFrameController {
               index: match.frame.index,
             },
             {
-              tabId,
               frameId: match.frame.id,
             }
           );
@@ -499,7 +488,6 @@ export default class TopFrameController {
             index: match.frame.index,
           },
           {
-            tabId,
             frameId: match.frame.id,
           }
         );
@@ -513,22 +501,20 @@ export default class TopFrameController {
             updates: updates.filter((update) => update.type !== "Hide"),
             enteredText: hintsState.enteredText,
           },
-          { tabId }
+          // tabId not needed in TopFrame context
         );
 
         // In case the “next” hints mode takes longer than the highlight
         // duration, remove the shruggie. It might flicker by otherwise, and we
         // don’t need it, just like we don’t show it when entering hints mode
         // initially.
-        this.sendRendererMessage({ type: "RemoveShruggie" }, { tabId });
+        this.sendRendererMessage({ type: "RemoveShruggie" });
 
         this.updateWorkerStateAfterHintActivation({
-          tabId,
           preventOverTyping,
         });
 
         this.enterHintsMode({
-          tabId,
           timestamp,
           mode: hintsState.mode,
         });
@@ -564,7 +550,6 @@ export default class TopFrameController {
         this.openNewTab({
           url,
           elementIndex: match.frame.index,
-          tabId,
           frameId: match.frame.id,
           foreground: false,
         });
@@ -589,11 +574,10 @@ export default class TopFrameController {
             })),
             enteredText: "",
           },
-          { tabId }
+          // tabId not needed in TopFrame context
         );
 
         this.updateWorkerStateAfterHintActivation({
-          tabId,
           preventOverTyping,
         });
 
@@ -611,7 +595,6 @@ export default class TopFrameController {
         this.openNewTab({
           url,
           elementIndex: match.frame.index,
-          tabId,
           frameId: match.frame.id,
           foreground: false,
         });
@@ -625,7 +608,6 @@ export default class TopFrameController {
         this.openNewTab({
           url,
           elementIndex: match.frame.index,
-          tabId,
           frameId: match.frame.id,
           foreground: true,
         });
@@ -643,7 +625,6 @@ export default class TopFrameController {
                 index: match.frame.index,
               },
           {
-            tabId,
             frameId: match.frame.id,
           }
         );
@@ -674,7 +655,7 @@ export default class TopFrameController {
       updateMeasurements: false,
     });
 
-    this.getTextRects({ enteredChars, allElementsWithHints, words, tabId });
+    this.getTextRects({ enteredChars, allElementsWithHints, words });
 
     this.sendRendererMessage(
       {
@@ -682,7 +663,7 @@ export default class TopFrameController {
         updates,
         enteredText,
       },
-      { tabId }
+      // tabId not needed in TopFrame context
     );
 
     this.updateBadge();
@@ -692,13 +673,11 @@ export default class TopFrameController {
   openNewTab({
     url,
     elementIndex,
-    tabId,
     frameId,
     foreground,
   }: {
     url: string;
     elementIndex: number;
-    tabId: number;
     frameId: number;
     foreground: boolean;
   }): void {
@@ -706,9 +685,7 @@ export default class TopFrameController {
       {
         type: "FocusElement",
         index: elementIndex,
-      },
-      { tabId, frameId }
-    );
+      }, frameId);
 
     // In Firefox, creating a tab with `openerTabId` works just like
     // right-clicking a link and choosing "Open Link in New Tab" (basically,
@@ -742,7 +719,7 @@ export default class TopFrameController {
               foreground,
               chromiumVariant,
             },
-            { tabId, frameId: TOP_FRAME_ID }
+            { frameId: TOP_FRAME_ID }
           );
         }),
         "BackgroundProgram#openNewTab->getChromiumVariant"
@@ -871,10 +848,8 @@ export default class TopFrameController {
       },
       peeking: false,
     };
-    this.sendWorkerMessage(this.makeWorkerState(tabState), {
-      tabId,
-      frameId: "all_frames",
-    });
+    this.sendWorkerMessage(this.makeWorkerState(tabState), "all_frames",
+    );
     this.setTimeout( t.UPDATE_INTERVAL.value);
 
     time.start("render");
@@ -884,7 +859,7 @@ export default class TopFrameController {
         elements: elementRenders,
         mixedCase: isMixedCase(this.options.values.chars),
       },
-      { tabId }
+      // tabId not needed in TopFrame context
     );
     this.updateBadge();
   }
@@ -909,7 +884,6 @@ export default class TopFrameController {
     ) {
       if (hintsState.elementsWithHints.every((element) => element.hidden)) {
         this.enterHintsMode({
-          tabId,
           timestamp: Date.now(),
           mode: hintsState.mode,
         });
@@ -920,18 +894,12 @@ export default class TopFrameController {
         };
 
         // Refresh `oneTimeWindowMessageToken`.
-        this.sendWorkerMessage(this.makeWorkerState(tabState), {
-          tabId,
-          frameId: "all_frames",
-        });
+        this.sendWorkerMessage(this.makeWorkerState(tabState), "all_frames",
+        );
 
         this.sendWorkerMessage(
-          { type: "UpdateElements" },
-          {
-            tabId,
-            frameId: TOP_FRAME_ID,
-          }
-        );
+          { type: "UpdateElements" }, TOP_FRAME_ID,
+          );
       }
     }
   }
@@ -1141,10 +1109,8 @@ export default class TopFrameController {
         }
 
         // Refresh `oneTimeWindowMessageToken`.
-        this.sendWorkerMessage(this.makeWorkerState(tabState), {
-          tabId: info.tabId,
-          frameId: "all_frames",
-        });
+        this.sendWorkerMessage(this.makeWorkerState(tabState), "all_frames",
+        );
 
         enterHintsMode(hintsState.mode);
         break;
@@ -1159,9 +1125,7 @@ export default class TopFrameController {
         }
 
         this.sendRendererMessage(
-          hintsState.peeking ? { type: "Unpeek" } : { type: "Peek" },
-          { tabId: info.tabId }
-        );
+          hintsState.peeking ? { type: "Unpeek" } : { type: "Peek" });
 
         hintsState.peeking = !hintsState.peeking;
         break;
@@ -1170,45 +1134,36 @@ export default class TopFrameController {
       case "Escape":
         this.exitHintsMode();
         this.sendWorkerMessage(
-          { type: "Escape" },
-          { tabId: info.tabId, frameId: "all_frames" }
-        );
+          { type: "Escape" }, "all_frames" );
         break;
 
       case "ActivateHint":
-        this.handleHintInput(info.tabId, timestamp, {
           type: "ActivateHint",
           alt: false,
         });
         break;
 
       case "ActivateHintAlt":
-        this.handleHintInput(info.tabId, timestamp, {
           type: "ActivateHint",
           alt: true,
         });
         break;
 
       case "Backspace":
-        this.handleHintInput(info.tabId, timestamp, { type: "Backspace" });
         break;
 
       case "ReverseSelection":
         this.sendWorkerMessage(
-          { type: "ReverseSelection" },
-          { tabId: info.tabId, frameId: "all_frames" }
-        );
+          { type: "ReverseSelection" }, "all_frames" );
         break;
     }
   }
 
 
   enterHintsMode({
-    tabId,
     timestamp,
     mode,
   }: {
-    tabId: number;
     timestamp: number;
     mode: HintsMode;
   }): void {
@@ -1223,7 +1178,6 @@ export default class TopFrameController {
         types: getElementTypes(mode),
       },
       {
-        tabId,
         frameId: TOP_FRAME_ID,
       }
     );
@@ -1276,10 +1230,8 @@ export default class TopFrameController {
     };
 
     if (sendMessages) {
-      this.sendWorkerMessage(this.makeWorkerState(tabState), {
-        tabId,
-        frameId: "all_frames",
-      });
+      this.sendWorkerMessage(this.makeWorkerState(tabState), "all_frames",
+      );
     }
 
     this.updateBadge();
@@ -1322,7 +1274,7 @@ export default class TopFrameController {
               })),
             enteredText: "",
           },
-          { tabId }
+          // tabId not needed in TopFrame context
         );
         if (refresh) {
           this.refreshHintsRendering();
@@ -1360,10 +1312,8 @@ export default class TopFrameController {
         this.options.values.overTypingDuration
     ) {
       tabState.keyboardMode = { type: "FromHintsState" };
-      this.sendWorkerMessage(this.makeWorkerState(tabState), {
-        tabId,
-        frameId: "all_frames",
-      });
+      this.sendWorkerMessage(this.makeWorkerState(tabState), "all_frames",
+      );
     }
   }
 
@@ -1376,7 +1326,6 @@ export default class TopFrameController {
     fireAndForget(
       browser.browserAction.setBadgeText({
         text: getBadgeText(hintsState),
-        tabId,
       }),
       "BackgroundProgram#updateBadge->setBadgeText"
     );
@@ -1439,13 +1388,7 @@ export default class TopFrameController {
   }
 
 
-  updateWorkerStateAfterHintActivation({
-    tabId,
-    preventOverTyping,
-  }: {
-    tabId: number;
-    preventOverTyping: boolean;
-  }): void {
+  updateWorkerStateAfterHintActivation({ preventOverTyping }: { preventOverTyping: boolean; }): void {
     const tabState = this.state;
 
     if (preventOverTyping) {
@@ -1456,10 +1399,8 @@ export default class TopFrameController {
       this.setTimeout( this.options.values.overTypingDuration);
     }
 
-    this.sendWorkerMessage(this.makeWorkerState(tabState), {
-      tabId,
-      frameId: "all_frames",
-    });
+    this.sendWorkerMessage(this.makeWorkerState(tabState), "all_frames",
+    );
   }
 
 

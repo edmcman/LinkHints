@@ -16,11 +16,11 @@ import {
   flattenOptions,
   getDefaults,
   getRawOptions,
-  OptionsData,
-  PartialOptions,
+  type OptionsData,
+  type PartialOptions,
   unflattenOptions,
 } from "../shared/options";
-import { TabsPerf } from "../shared/perf";
+import type { TabsPerf } from "../shared/perf";
 import { tweakable, unsignedInt } from "../shared/tweakable";
 
 export const t = {
@@ -34,7 +34,7 @@ export default class BackgroundProgram {
   
   resets = new Resets();
   
-  tabsPerf: TabsPerf = [];
+  tabsPerf: TabsPerf = {} as TabsPerf;
 
   constructor() {
     const mac = false;
@@ -219,7 +219,7 @@ export default class BackgroundProgram {
 
   async updateOptions({ isInitial = false }: { isInitial?: boolean } = {}): Promise<void> {
     const rawOptions = await getRawOptions();
-    const options = unflattenOptions(rawOptions);
+    const [options] = unflattenOptions(rawOptions);
 
     this.options.values = options;
     this.options.raw = rawOptions;
@@ -283,7 +283,7 @@ export default class BackgroundProgram {
     if (!PROD) {
       this.sendOptionsMessage({
         type: "PerfUpdate",
-        perf: this.tabsPerf as TabsPerf,
+        perf: this.tabsPerf,
       });
     }
   }
@@ -292,7 +292,7 @@ export default class BackgroundProgram {
     try {
       const result = await browser.storage.local.get("tabsPerf");
       if (typeof result.tabsPerf === "object" && result.tabsPerf !== null) {
-        this.tabsPerf = result.tabsPerf as TabsPerf;
+        this.tabsPerf = result.tabsPerf;
       }
     } catch (error) {
       log("error", "BackgroundProgram#restoreTabsPerf", error);
