@@ -36,6 +36,10 @@ import type {
 } from "../shared/messages";
 import { TimeTracker } from "../shared/perf";
 import { selectorString, tweakable, unsignedInt } from "../shared/tweakable";
+import {
+  isTopFrame,
+  sendWorkerToRenderer,
+} from "../shared/DirectChannel";
 import { FrameMessage } from "./decoders";
 import ElementManager from "./ElementManager";
 
@@ -135,6 +139,22 @@ export default class WorkerProgram {
 
   sendMessage(message: FromWorker): void {
     log("log", "WorkerProgram#sendMessage", message.type, message);
+
+    // For hot messages in the top frame, try the direct channel first.
+    // This bypasses background routing for lower latency.
+    if (
+      isTopFrame() &&
+      (message.type === "ReportTextRects" ||
+        message.type === "ReportUpdatedElements")
+    ) {
+      const sent = sendWorkerToRenderer(message);
+      if (sent) {
+        // Also send to background so it stays in sync (required for now)
+        // TODO: Remove this once renderer fully owns element state
+      }
+    }
+
+    // Always send to background (keeps current behavior during migration)
     fireAndForget(
       browser.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
       "WorkerProgram#sendMessage",

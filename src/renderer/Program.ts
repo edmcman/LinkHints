@@ -16,6 +16,7 @@ import {
   STATUS_CLASS,
   TEXT_RECT_CLASS,
 } from "../shared/css";
+import TopFrameController from "./TopFrameController";
 import type {
   ElementRender,
   HintMeasurements,
@@ -86,6 +87,9 @@ export default class RendererProgram {
     parsed: undefined,
   };
 
+  /** Top-frame controller: single writer for per-tab state. */
+  controller = new TopFrameController();
+
   constructor() {
     this.shruggieElement = createHintElement(SHRUGGIE);
     this.shruggieElement.classList.add(SHRUGGIE_CLASS);
@@ -148,6 +152,19 @@ export default class RendererProgram {
     // hints mode, the old hints will be removed as soon as the new version
     // starts.
     this.unrender();
+    this.controller.start();
+
+    // Handle direct messages from worker (fast path for hot messages)
+    this.controller.setDirectMessageCallback((message) => {
+      if (message.type === "ReportTextRects") {
+        // Render text rects directly without going through background
+        // frameId 0 = top frame (direct channel only works in top frame)
+        this.unrenderTextRects(0);
+        this.renderTextRects(message.rects, 0);
+      }
+      // ReportUpdatedElements is still handled by background for now
+      // (multi-frame coordination required)
+    });
 
     this.resets.add(
       addListener(
@@ -202,6 +219,7 @@ export default class RendererProgram {
 
   stop(): void {
     log("log", "RendererProgram#stop");
+    this.controller.stop();
     this.resets.reset();
     this.unrender();
   }
@@ -230,6 +248,9 @@ export default class RendererProgram {
     const { message } = wrappedMessage;
 
     log("log", "RendererProgram#onMessage", message.type, message);
+
+    // Update controller state from incoming messages
+    this.controller.onRendererMessage(message);
 
     switch (message.type) {
       case "StateSync": {
