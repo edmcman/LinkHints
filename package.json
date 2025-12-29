@@ -4,6 +4,7 @@
   "scripts": {
     "start": "run-pty % npm run watch % npm run firefox % npm run chrome",
     "firefox": "sucrase-node scripts/wait-for-manifest.ts && npm run web-ext -- run",
+    "firefox:console": "sucrase-node scripts/firefox-console.ts",
     "chrome": "npm run firefox -- --target chromium",
     "compile": "rollup --config --bundleConfigAsCjs",
     "watch": "npm run compile -- --watch",
