@@ -1,8 +1,9 @@
 /*
- * Minimal BackgroundProgram - Options and routing only
+ * BackgroundProgram - Options and lifecycle management
  * Tab state management has been moved to TopFrameController
  */
 
+import iconsChecksum from "../icons/checksum";
 import { addListener, fireAndForget, log, Resets } from "../shared/main";
 import type {
   FromBackground,
@@ -93,12 +94,36 @@ export default class BackgroundProgram {
       )
     );
 
+    fireAndForget(
+      browser.browserAction.setBadgeBackgroundColor({ color: COLOR_BADGE }),
+      "BackgroundProgram#start->setBadgeBackgroundColor"
+    );
+
+    fireAndForget(
+      this.maybeOpenTutorial(),
+      "BackgroundProgram#start->maybeOpenTutorial"
+    );
+
+    fireAndForget(
+      this.maybeReopenOptions(),
+      "BackgroundProgram#start->maybeReopenOptions"
+    );
+
     log("log", "BackgroundProgram#start", "started", { tabs: tabs.length });
   }
 
   stop(): void {
     log("log", "BackgroundProgram#stop");
     this.resets.reset();
+  }
+
+  async sendContentMessage(
+    message: FromBackground,
+    { tabId, frameId }: { tabId: number; frameId: number | "all_frames" }
+  ): Promise<void> {
+    await (frameId === "all_frames"
+      ? browser.tabs.sendMessage(tabId, message)
+      : browser.tabs.sendMessage(tabId, message, { frameId }));
   }
 
   sendPopupMessage(message: ToPopup): void {
@@ -179,7 +204,7 @@ export default class BackgroundProgram {
         break;
 
       case "ResetPerf":
-        this.tabsPerf = [];
+        this.tabsPerf = {} as TabsPerf;
         this.updateOptionsPageData();
         break;
 
@@ -273,6 +298,38 @@ export default class BackgroundProgram {
     }
   }
 
+  async maybeOpenTutorial(): Promise<void> {
+    const { tutorialShown } = await browser.storage.local.get("tutorialShown");
+    if (tutorialShown !== true) {
+      if (t.PREFER_WINDOWS.value) {
+        await browser.windows.create({
+          focused: true,
+          url: META_TUTORIAL,
+        });
+      } else {
+        await browser.tabs.create({
+          active: true,
+          url: META_TUTORIAL,
+        });
+      }
+      await browser.storage.local.set({ tutorialShown: true });
+    }
+  }
+
+  async maybeReopenOptions(): Promise<void> {
+    if (!PROD) {
+      const { optionsPage } = await browser.storage.local.get("optionsPage");
+      if (typeof optionsPage === "boolean") {
+        const isActive = optionsPage;
+        const activeTab = await getCurrentTab();
+        await browser.runtime.openOptionsPage();
+        if (!isActive && activeTab.id !== undefined) {
+          await browser.tabs.update(activeTab.id, { active: true });
+        }
+      }
+    }
+  }
+
   updateOptionsPageData(): void {
     this.sendOptionsMessage({
       type: "StateSync",
@@ -298,4 +355,19 @@ export default class BackgroundProgram {
       log("error", "BackgroundProgram#restoreTabsPerf", error);
     }
   }
+}
+
+// Helper functions
+
+async function getCurrentTab(): Promise<browser.tabs.Tab> {
+  const tabs = await browser.tabs.query({
+    active: true,
+    windowId: browser.windows.WINDOW_ID_CURRENT,
+  });
+  if (tabs.length !== 1) {
+    throw new Error(
+      `getCurrentTab: Got an unexpected amount of tabs: ${tabs.length}`
+    );
+  }
+  return tabs[0];
 }
