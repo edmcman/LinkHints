@@ -16,11 +16,15 @@ async function activateHints(
   page: Page,
   keystroke: string = "Alt+j"
 ): Promise<void> {
-  await page.waitForFunction(() => document.querySelector("#__LinkHintsWebExt")?.shadowRoot === undefined);
+  await page.waitForFunction(
+    () => document.querySelector("#__LinkHintsWebExt")?.shadowRoot === undefined
+  );
   // UGH I want to get rid of this so bad.
   await page.waitForTimeout(200);
   await page.keyboard.press(keystroke);
-  await page.waitForFunction(() => document.querySelector("#__LinkHintsWebExt")?.shadowRoot !== undefined);
+  await page.waitForFunction(
+    () => document.querySelector("#__LinkHintsWebExt")?.shadowRoot !== undefined
+  );
 }
 
 // Helper to perform step 3 actions
