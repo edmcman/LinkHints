@@ -102,8 +102,6 @@ test("detect injected elements", async ({
   // Press 'f' to go to step-3
   await page.keyboard.press("f");
 
-  console.log("alt+k for step 3");
-
   // Perform step 3 with Alt+k
   await performStep3(page, context, "Alt+k");
 
@@ -111,6 +109,75 @@ test("detect injected elements", async ({
   // XXX: I don't think we can tell if a tab has focus in playwright.  Maybe by taking a screenshot of the browser?
   await performStep3(page, context, "Alt+l");
 
+  // Press escape to exit hints mode
+  await page.keyboard.press("Escape");
+
   // Press 'f' to go to step-4
+  await activateHints(page);
   await page.keyboard.press("f");
+
+  await page.waitForURL(/#step-4/);
+
+  // Activate hints on step-4
+  await activateHints(page);
+
+  // Snapshot hints on step-4
+  await snapshotHints(page, playwrightExpect, "shadow-step4.html");
+
+  // Type "1984"
+  await page.keyboard.type("1984");
+
+  // Look for the visible string "1984 is a novel by George Orwell."
+  await expect(page.locator('html')).toContainText("1984 is a novel by George Orwell.");
+
+  // Then click one of the tiny pagination links
+  await page.waitForTimeout(1000);
+  await activateHints(page);
+  await page.keyboard.type("11");
+  await page.waitForTimeout(10000);
+
+  // Then look for an a tag with text 11 in step-4 and verify it is focused
+  await expect(page.locator('#step-4 a').filter({ hasText: '11' })).toBeFocused();
+
+  await activateHints(page);
+  await page.keyboard.press("j");
+
+  await page.waitForURL(/#step-5/);
+
+  await activateHints(page);
+
+  // Snapshot hints on step-5
+  await snapshotHints(page, playwrightExpect, "shadow-step5.html");
+
+  // Type "IM" and ensure that iMac is selected
+  await page.keyboard.type("IM");
+  await expect(page.locator('#step-5 a').filter({ hasText: 'iMac' })).toBeFocused();
+  await page.waitForTimeout(1000);
+
+  // Then try "IPHONE"
+  await activateHints(page);
+  await page.keyboard.type("IPHONE");
+  await expect(page.locator('#step-5 a').filter({ hasText: 'iPhone' })).toBeFocused();
+  await page.waitForTimeout(1000);
+
+  await activateHints(page);
+  await page.keyboard.press("f");
+
+  await page.waitForURL(/#step-6/);
+
+  // Activate hints on step-6
+  await activateHints(page, "Alt+Shift+j");
+
+  // Snapshot hints on step-6
+  await snapshotHints(page, playwrightExpect, "shadow-step6.html");
+
+  // Check boxes
+  await page.keyboard.type("GMV");
+  await page.keyboard.press("Escape");
+
+  // Verify that the checkboxes are checked
+  await expect(page.locator('#step-6 input[value="lettuce"]')).toBeChecked();
+  await expect(page.locator('#step-6 input[value="cucumber"]')).toBeChecked();
+  await expect(page.locator('#step-6 input[value="tomato"]')).toBeChecked();
+
 });
