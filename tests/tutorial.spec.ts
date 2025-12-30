@@ -29,6 +29,8 @@ async function activateHints(
       document.querySelector("#__LinkHintsWebExt")?.shadowRoot?.innerHTML !==
       undefined
   );
+  // UGH I want to get rid of this so bad.
+  await page.waitForTimeout(200);
 }
 
 // Helper to perform step 3 actions
