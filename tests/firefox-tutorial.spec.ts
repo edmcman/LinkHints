@@ -1,10 +1,16 @@
+import { expect as playwrightExpect } from "@playwright/test";
 import path from "path";
 import type { BrowserContext } from "playwright";
 import { createFixture } from "playwright-webextext";
 
 const TUTORIAL_WAIT_MS = 1_000;
 
-const tutorialUrl = "https://lydell.github.io/LinkHints/tutorial.html";
+const tutorialUrl = `file://${path.resolve(
+  __dirname,
+  "..",
+  "compiled-docs",
+  "tutorial.html"
+)}`;
 
 const extensionPath = path.resolve(__dirname, "..", "compiled");
 
@@ -36,4 +42,13 @@ test("detect injected elements", async ({
 
   // Wait for the extension's renderer container to appear
   await page.waitForSelector("#__LinkHintsWebExt", { timeout: 5000 });
+
+  // Assert the shadow content snapshot to verify hints
+  const shadowHTML = await page
+    .locator("#__LinkHintsWebExt")
+    .evaluate((el) => el.shadowRoot?.innerHTML ?? "");
+  playwrightExpect(shadowHTML).toMatchSnapshot("shadow.html");
+
+  // Assert the screenshot to verify visual rendering
+  await playwrightExpect(page).toHaveScreenshot();
 });
