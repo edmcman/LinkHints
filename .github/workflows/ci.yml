@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  build:
+  deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages
