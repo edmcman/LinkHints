@@ -16,9 +16,11 @@ async function activateHints(
   page: Page,
   keystroke: string = "Alt+j"
 ): Promise<void> {
-  await page.keyboard.press(keystroke);
-  await page.waitForSelector("#__LinkHintsWebExt", { timeout: 5000 });
+  await page.waitForFunction(() => !document.querySelector('.hint'));
+  // UGH I want to get rid of this so bad.
   await page.waitForTimeout(500);
+  await page.keyboard.press(keystroke);
+  await page.waitForSelector(".hint");
 }
 
 // Helper to perform step 3 actions
@@ -43,10 +45,12 @@ async function performStep3(
   await page.keyboard.press("e");
 
   // Check new tab
-  await page.waitForTimeout(1000);
-  const pages = context.pages();
-  const newPage = pages.find((p) => p.url().includes("example.com"));
-  expect(newPage).toBeTruthy();
+  let newPage: Page | undefined;
+  await expect.poll(async () => {
+    const pages = context.pages();
+    newPage = pages.find((p) => p.url().includes("example.com"));
+    return newPage;
+  }).toBeTruthy();
   await newPage?.close();
 }
 
@@ -139,10 +143,8 @@ test("Run through tutorial", async ({
   );
 
   // Then click one of the tiny pagination links
-  await page.waitForTimeout(1000);
   await activateHints(page);
   await page.keyboard.type("11");
-  await page.waitForTimeout(10000);
 
   // Then look for an a tag with text 11 in step-4 and verify it is focused
   await expect(
@@ -164,7 +166,6 @@ test("Run through tutorial", async ({
   await expect(
     page.locator("#step-5 a").filter({ hasText: "iMac" })
   ).toBeFocused();
-  await page.waitForTimeout(1000);
 
   // Then try "IPHONE"
   await activateHints(page);
@@ -172,7 +173,6 @@ test("Run through tutorial", async ({
   await expect(
     page.locator("#step-5 a").filter({ hasText: "iPhone" })
   ).toBeFocused();
-  await page.waitForTimeout(1000);
 
   await activateHints(page);
   await page.keyboard.press("f");
@@ -227,11 +227,12 @@ test("Run through tutorial", async ({
   await page.waitForTimeout(1000);
 
   // Get the selected text and verify it is correct
-  const selectedText = await page.evaluate(() => {
-    const selection = window.getSelection();
-    return selection ? selection.toString() : "";
-  });
-  expect(selectedText).toBe("Link Hints adds two extra shortcuts:");
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      const selection = window.getSelection();
+      return selection ? selection.toString() : "";
+    });
+  }).toBe("Link Hints adds two extra shortcuts:");
 
   await activateHints(page, "Alt+Shift+L");
 
@@ -239,7 +240,8 @@ test("Run through tutorial", async ({
   await page.keyboard.press("Alt+n");
 
   // Verify clipboard contents
-  const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
-  expect(clipboardText).toBe("Link Hints adds two extra shortcuts:");
+  await expect.poll(async () => {
+    return await page.evaluate(() => navigator.clipboard.readText());
+  }).toBe("Link Hints adds two extra shortcuts:");
 
 });
