@@ -2,6 +2,7 @@
 /custom.config.cjs
 /node_modules/
 /compiled/
+/compiled*/
 /compiled-docs/
 /dist*/
 /test-results
