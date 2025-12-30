@@ -12,14 +12,21 @@ const extensionPath = path.resolve(__dirname, "..", "compiled");
 const { test, expect } = createFixture(extensionPath);
 
 // Helper to activate hints
-async function activateHints(page: Page, keystroke: string = "Alt+j") {
+async function activateHints(
+  page: Page,
+  keystroke: string = "Alt+j"
+): Promise<void> {
   await page.keyboard.press(keystroke);
   await page.waitForSelector("#__LinkHintsWebExt", { timeout: 5000 });
   await page.waitForTimeout(500);
 }
 
 // Helper to perform step 3 actions
-async function performStep3(page: Page, context: BrowserContext, keystroke: string) {
+async function performStep3(
+  page: Page,
+  context: BrowserContext,
+  keystroke: string
+): Promise<void> {
   // Wait for #step-3
   await page.waitForURL(/#step-3/);
 
@@ -27,7 +34,10 @@ async function performStep3(page: Page, context: BrowserContext, keystroke: stri
   await activateHints(page, keystroke);
 
   // Snapshot
-  await snapshotHints(page, playwrightExpect, `shadow-step3-${keystroke.replace(/[^a-zA-Z0-9]/g, '')}.html`);
+  await snapshotHints(
+    page,
+    `shadow-step3-${keystroke.replace(/[^a-zA-Z0-9]/g, "")}.html`
+  );
 
   // Press 'o'
   await page.keyboard.press("e");
@@ -35,13 +45,13 @@ async function performStep3(page: Page, context: BrowserContext, keystroke: stri
   // Check new tab
   await page.waitForTimeout(1000);
   const pages = context.pages();
-  const newPage = pages.find(p => p.url().includes('example.com'));
+  const newPage = pages.find((p) => p.url().includes("example.com"));
   expect(newPage).toBeTruthy();
   await newPage?.close();
 }
 
 // Helper to snapshot hints
-async function snapshotHints(page: Page, playwrightExpect: any, snapshotName: string) {
+async function snapshotHints(page: Page, snapshotName: string): Promise<void> {
   const shadowHTML = await page
     .locator("#__LinkHintsWebExt")
     .evaluate((el) => el.shadowRoot?.innerHTML ?? "");
@@ -74,7 +84,7 @@ test("detect injected elements", async ({
   await activateHints(page);
 
   // Snapshot
-  await snapshotHints(page, playwrightExpect, "shadow.html");
+  await snapshotHints(page, "shadow.html");
 
   // Simulate user selecting the first hint by pressing 'j'
   await page.keyboard.press("j");
@@ -86,7 +96,7 @@ test("detect injected elements", async ({
   await activateHints(page);
 
   // Snapshot hints on step-1
-  await snapshotHints(page, playwrightExpect, "shadow-step1.html");
+  await snapshotHints(page, "shadow-step1.html");
 
   // Press 'f' again to go to step-2
   await page.keyboard.press("f");
@@ -97,7 +107,7 @@ test("detect injected elements", async ({
   await activateHints(page);
 
   // Snapshot hints on step-2
-  await snapshotHints(page, playwrightExpect, "shadow-step2.html");
+  await snapshotHints(page, "shadow-step2.html");
 
   // Press 'f' to go to step-3
   await page.keyboard.press("f");
@@ -122,13 +132,15 @@ test("detect injected elements", async ({
   await activateHints(page);
 
   // Snapshot hints on step-4
-  await snapshotHints(page, playwrightExpect, "shadow-step4.html");
+  await snapshotHints(page, "shadow-step4.html");
 
   // Type "1984"
   await page.keyboard.type("1984");
 
   // Look for the visible string "1984 is a novel by George Orwell."
-  await expect(page.locator('html')).toContainText("1984 is a novel by George Orwell.");
+  await expect(page.locator("html")).toContainText(
+    "1984 is a novel by George Orwell."
+  );
 
   // Then click one of the tiny pagination links
   await page.waitForTimeout(1000);
@@ -137,7 +149,9 @@ test("detect injected elements", async ({
   await page.waitForTimeout(10000);
 
   // Then look for an a tag with text 11 in step-4 and verify it is focused
-  await expect(page.locator('#step-4 a').filter({ hasText: '11' })).toBeFocused();
+  await expect(
+    page.locator("#step-4 a").filter({ hasText: "11" })
+  ).toBeFocused();
 
   await activateHints(page);
   await page.keyboard.press("j");
@@ -147,17 +161,21 @@ test("detect injected elements", async ({
   await activateHints(page);
 
   // Snapshot hints on step-5
-  await snapshotHints(page, playwrightExpect, "shadow-step5.html");
+  await snapshotHints(page, "shadow-step5.html");
 
   // Type "IM" and ensure that iMac is selected
   await page.keyboard.type("IM");
-  await expect(page.locator('#step-5 a').filter({ hasText: 'iMac' })).toBeFocused();
+  await expect(
+    page.locator("#step-5 a").filter({ hasText: "iMac" })
+  ).toBeFocused();
   await page.waitForTimeout(1000);
 
   // Then try "IPHONE"
   await activateHints(page);
   await page.keyboard.type("IPHONE");
-  await expect(page.locator('#step-5 a').filter({ hasText: 'iPhone' })).toBeFocused();
+  await expect(
+    page.locator("#step-5 a").filter({ hasText: "iPhone" })
+  ).toBeFocused();
   await page.waitForTimeout(1000);
 
   await activateHints(page);
@@ -169,7 +187,7 @@ test("detect injected elements", async ({
   await activateHints(page, "Alt+Shift+j");
 
   // Snapshot hints on step-6
-  await snapshotHints(page, playwrightExpect, "shadow-step6.html");
+  await snapshotHints(page, "shadow-step6.html");
 
   // Check boxes
   await page.keyboard.type("GMV");
@@ -179,5 +197,4 @@ test("detect injected elements", async ({
   await expect(page.locator('#step-6 input[value="lettuce"]')).toBeChecked();
   await expect(page.locator('#step-6 input[value="cucumber"]')).toBeChecked();
   await expect(page.locator('#step-6 input[value="tomato"]')).toBeChecked();
-
 });
