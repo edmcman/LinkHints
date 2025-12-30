@@ -5,3 +5,4 @@ custom.config.cjs
 /compiled-docs/
 /dist*/
 test-results
+.tool-versions
