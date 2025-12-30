@@ -59,7 +59,7 @@ async function snapshotHints(page: Page, snapshotName: string): Promise<void> {
   await playwrightExpect(page).toHaveScreenshot();
 }
 
-test("detect injected elements", async ({
+test("Run through tutorial", async ({
   context,
 }: {
   context: BrowserContext;
@@ -180,17 +180,66 @@ test("detect injected elements", async ({
   await page.waitForURL(/#step-6/);
 
   // Activate hints on step-6
-  await activateHints(page, "Alt+Shift+j");
-
+  // This must be J, not j.
+  await activateHints(page, "Alt+Shift+J");
   // Check boxes
-  await page.keyboard.type("GMV");
-  await page.keyboard.press("Escape");
+  await page.keyboard.type("gmv", { delay: 500 });
 
   // Snapshot hints on step-6
   await snapshotHints(page, "shadow-step6.html");
+
+  await page.keyboard.press("Escape");
 
   // Verify that the checkboxes are checked
   await expect(page.locator('#step-6 input[id="lettuce"]')).toBeChecked();
   await expect(page.locator('#step-6 input[id="cucumber"]')).toBeChecked();
   await expect(page.locator('#step-6 input[id="tomato"]')).toBeChecked();
+
+  // Then open example.com, mozilla.org, and wikipedia.org
+  await activateHints(page, "Alt+Shift+K");
+
+  // Open links
+  await page.keyboard.type("eow", { delay: 500 });
+  await page.keyboard.press("Escape");
+
+  const urls = ["example.com", "mozilla.org", "wikipedia.org"];
+  for (const urlPart of urls) {
+    console.log("Checking for new page with URL part:", urlPart);
+    const pages = context.pages();
+    const newPage = pages.find((p) => p.url().includes(urlPart));
+    expect(newPage).toBeTruthy();
+    await newPage?.close();
+  }
+
+  // Go to step-7
+  await activateHints(page);
+  await page.keyboard.press("f");
+
+  await page.waitForURL(/#step-7/);
+
+  await activateHints(page, "Alt+Shift+L");
+
+  // Snapshot hints on step-7
+  await snapshotHints(page, "shadow-step7.html");
+
+  // Select "Link Hints adds two extra shortcuts:"
+  await page.keyboard.press("n");
+  await page.waitForTimeout(1000);
+
+  // Get the selected text and verify it is correct
+  const selectedText = await page.evaluate(() => {
+    const selection = window.getSelection();
+    return selection ? selection.toString() : "";
+  });
+  expect(selectedText).toBe("Link Hints adds two extra shortcuts:");
+
+  await activateHints(page, "Alt+Shift+L");
+
+  // Copy "Link Hints adds two extra shortcuts:" to clipboard
+  await page.keyboard.press("Alt+n");
+
+  // Verify clipboard contents
+  const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboardText).toBe("Link Hints adds two extra shortcuts:");
+
 });
