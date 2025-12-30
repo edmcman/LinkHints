@@ -7,7 +7,7 @@ const TUTORIAL_WAIT_MS = 1_000;
 
 const tutorialUrl = "https://lydell.github.io/LinkHints/tutorial.html";
 
-const extensionPath = path.resolve(__dirname, "..", "compiled");
+const extensionPath = path.resolve(__dirname, "..", "compiled-dev");
 
 const { test, expect } = createFixture(extensionPath);
 
@@ -17,13 +17,17 @@ async function activateHints(
   keystroke: string = "Alt+j"
 ): Promise<void> {
   await page.waitForFunction(
-    () => document.querySelector("#__LinkHintsWebExt")?.shadowRoot === undefined
+    () =>
+      document.querySelector("#__LinkHintsWebExt")?.shadowRoot?.innerHTML ===
+      undefined
   );
   // UGH I want to get rid of this so bad.
   await page.waitForTimeout(200);
   await page.keyboard.press(keystroke);
   await page.waitForFunction(
-    () => document.querySelector("#__LinkHintsWebExt")?.shadowRoot !== undefined
+    () =>
+      document.querySelector("#__LinkHintsWebExt")?.shadowRoot?.innerHTML !==
+      undefined
   );
 }
 
