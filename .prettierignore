@@ -3,5 +3,6 @@
 *.custom.js
 /compiled/
 /compiled-docs/
+/test-results/
 *.json
 /rollup.config-*.js
