@@ -8,7 +8,7 @@
 		"ghcr.io/devcontainers-extra/features/apt-packages:1": {
 			"clean_ppas": true,
 			"preserve_apt_list": true,
-			"packages": true,
+			"packages": "xvfb,xauth",
 			"ppas": "ppa:deadsnakes/ppa"
 		},
 		"ghcr.io/devcontainers/features/git-lfs:1": {
@@ -24,7 +24,7 @@
 	// "forwardPorts": [],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "npm install",
+	"postCreateCommand": "npm install && sudo npx playwright install-deps && npx playwright install",
 
 	// Configure tool-specific properties.
 	// "customizations": {},
