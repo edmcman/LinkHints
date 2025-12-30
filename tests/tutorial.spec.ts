@@ -230,7 +230,7 @@ test("Run through tutorial", async ({
   await activateHints(page, "Alt+Shift+J");
   // Check boxes
   console.log("Typing 'gmv' to check checkboxes");
-  await page.keyboard.type("gmv", { delay: 500 });
+  await page.keyboard.type("gmv", { delay: 1000 });
 
   // Snapshot hints on step-6
   await snapshotHints(page, "shadow-step6.html");
@@ -251,7 +251,7 @@ test("Run through tutorial", async ({
 
   // Open links
   console.log("Typing 'eow' to open example.com, mozilla.org, wikipedia.org");
-  await page.keyboard.type("eow", { delay: 500 });
+  await page.keyboard.type("eow", { delay: 1000 });
   await page.keyboard.press("Escape");
   console.log("Pressed Escape after opening links");
 
