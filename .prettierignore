@@ -4,5 +4,6 @@
 /compiled/
 /compiled-docs/
 /test-results/
+/tests/*-snapshots/
 *.json
 /rollup.config-*.js

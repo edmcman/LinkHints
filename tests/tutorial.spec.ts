@@ -16,11 +16,11 @@ async function activateHints(
   page: Page,
   keystroke: string = "Alt+j"
 ): Promise<void> {
-  await page.waitForFunction(() => !document.querySelector('.hint'));
+  await page.waitForFunction(() => document.querySelector("#__LinkHintsWebExt")?.shadowRoot === undefined);
   // UGH I want to get rid of this so bad.
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(200);
   await page.keyboard.press(keystroke);
-  await page.waitForSelector(".hint");
+  await page.waitForFunction(() => document.querySelector("#__LinkHintsWebExt")?.shadowRoot !== undefined);
 }
 
 // Helper to perform step 3 actions
@@ -46,11 +46,13 @@ async function performStep3(
 
   // Check new tab
   let newPage: Page | undefined;
-  await expect.poll(async () => {
-    const pages = context.pages();
-    newPage = pages.find((p) => p.url().includes("example.com"));
-    return newPage;
-  }).toBeTruthy();
+  await expect
+    .poll(() => {
+      const pages = context.pages();
+      newPage = pages.find((p) => p.url().includes("example.com"));
+      return newPage;
+    })
+    .toBeTruthy();
   await newPage?.close();
 }
 
@@ -227,12 +229,14 @@ test("Run through tutorial", async ({
   await page.waitForTimeout(1000);
 
   // Get the selected text and verify it is correct
-  await expect.poll(async () => {
-    return await page.evaluate(() => {
-      const selection = window.getSelection();
-      return selection ? selection.toString() : "";
-    });
-  }).toBe("Link Hints adds two extra shortcuts:");
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const selection = window.getSelection();
+        return selection !== null ? selection.toString() : "";
+      })
+    )
+    .toBe("Link Hints adds two extra shortcuts:");
 
   await activateHints(page, "Alt+Shift+L");
 
@@ -240,8 +244,7 @@ test("Run through tutorial", async ({
   await page.keyboard.press("Alt+n");
 
   // Verify clipboard contents
-  await expect.poll(async () => {
-    return await page.evaluate(() => navigator.clipboard.readText());
-  }).toBe("Link Hints adds two extra shortcuts:");
-
+  await expect
+    .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("Link Hints adds two extra shortcuts:");
 });
