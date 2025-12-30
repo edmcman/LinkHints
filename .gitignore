@@ -4,3 +4,4 @@ custom.config.cjs
 /compiled/
 /compiled-docs/
 /dist*/
+test-results

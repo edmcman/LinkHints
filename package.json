@@ -13,7 +13,7 @@
     "build:all": "npm run build:chrome && npm run build:firefox",
     "png-icons": "sucrase-node scripts/png-icons.ts",
     "web-ext": "sucrase-node node_modules/.bin/web-ext",
-    "test:firefox": "npm run compile && playwright test --headed --project=firefox",
+    "test:playwright": "npm run compile && playwright test --project=firefox",
     "test": "run-pty --auto-exit % npm run build:all % eslint . --report-unused-disable-directives % prettier --check . % tsc"
   },
   "dependencies": {
