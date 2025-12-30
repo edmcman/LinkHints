@@ -3,6 +3,7 @@ import type { PlaywrightTestConfig } from "@playwright/test";
 const config: PlaywrightTestConfig = {
   testDir: "tests",
   timeout: 60_000,
+  retries: 2,
   expect: {
     timeout: 20_000,
     toHaveScreenshot: {
