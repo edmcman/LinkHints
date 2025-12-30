@@ -74,10 +74,6 @@ test("detect injected elements", async ({
   await page.goto(tutorialUrl);
   await page.waitForLoadState("load");
 
-  console.log(
-    "open tabs:",
-    context.pages().map((p) => p.url())
-  );
   expect(page.url()).toBe(tutorialUrl);
 
   // Activate hints
@@ -186,15 +182,15 @@ test("detect injected elements", async ({
   // Activate hints on step-6
   await activateHints(page, "Alt+Shift+j");
 
-  // Snapshot hints on step-6
-  await snapshotHints(page, "shadow-step6.html");
-
   // Check boxes
   await page.keyboard.type("GMV");
   await page.keyboard.press("Escape");
 
+  // Snapshot hints on step-6
+  await snapshotHints(page, "shadow-step6.html");
+
   // Verify that the checkboxes are checked
-  await expect(page.locator('#step-6 input[value="lettuce"]')).toBeChecked();
-  await expect(page.locator('#step-6 input[value="cucumber"]')).toBeChecked();
-  await expect(page.locator('#step-6 input[value="tomato"]')).toBeChecked();
+  await expect(page.locator('#step-6 input[id="lettuce"]')).toBeChecked();
+  await expect(page.locator('#step-6 input[id="cucumber"]')).toBeChecked();
+  await expect(page.locator('#step-6 input[id="tomato"]')).toBeChecked();
 });
