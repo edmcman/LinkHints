@@ -10,6 +10,10 @@ const config: PlaywrightTestConfig = {
       maxDiffPixelRatio: 0.02,
     },
   },
+  use: {
+    actionTimeout: 10_000,
+    navigationTimeout: 10_000,
+  },
   reporter: "list",
   projects: [
     {
