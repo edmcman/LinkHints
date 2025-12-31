@@ -7,7 +7,7 @@ const TUTORIAL_WAIT_MS = 1_000;
 
 const tutorialUrl = "https://lydell.github.io/LinkHints/tutorial.html";
 
-const extensionPath = path.resolve(__dirname, "..", "compiled-dev");
+const extensionPath = path.resolve(__dirname, "..", "compiled");
 
 const { test, expect } = createFixture(extensionPath);
 
@@ -68,9 +68,12 @@ async function performStep3(
 
 // Helper to snapshot hints
 async function snapshotHints(page: Page, snapshotName: string): Promise<void> {
-  const shadowHTML = await page
-    .locator("#__LinkHintsWebExt")
-    .evaluate((el) => el.shadowRoot?.innerHTML ?? "missing shadow DOM");
+  const shadowHTML = await page.locator("#__LinkHintsWebExt").evaluate((el) => {
+    if (el.shadowRoot === null) {
+      throw new Error("Missing shadow DOM");
+    }
+    return el.shadowRoot.innerHTML;
+  });
   playwrightExpect(shadowHTML).toMatchSnapshot(snapshotName);
   await playwrightExpect(page).toHaveScreenshot();
 }
