@@ -14,6 +14,7 @@ import type {
 import type { Box, LogLevel } from "./main";
 import type { OptionsData, PartialOptions } from "./options";
 import type { Durations, Stats, TabsPerf } from "./perf";
+import type { TabState } from "./state";
 
 export type FromBackground =
   | {
@@ -168,9 +169,26 @@ export type FromRenderer =
     }
   | {
       type: "RendererScriptAdded";
+    }
+  | {
+      type: "TabStateResponse";
+      tabState: TabState | undefined;
+    }
+  | {
+      type: "TabStateUpdated";
+      tabState: TabState;
     };
 
 export type ToRenderer =
+  | {
+      type: "DeleteTabState";
+    }
+  | {
+      type: "GetTabState";
+    }
+  | {
+      type: "HasTabState";
+    }
   | {
       type: "Peek";
     }
@@ -190,6 +208,10 @@ export type ToRenderer =
   | {
       type: "RotateHints";
       forward: boolean;
+    }
+  | {
+      type: "SetTabState";
+      tabState: TabState;
     }
   | {
       type: "StateSync";

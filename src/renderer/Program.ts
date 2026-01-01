@@ -38,6 +38,7 @@ import type {
   ToBackground,
 } from "../shared/messages";
 import { TimeTracker } from "../shared/perf";
+import type { TabState } from "../shared/state";
 import { tweakable, unsignedInt } from "../shared/tweakable";
 import { applyStyles, parseCSS, Rule } from "./css";
 
@@ -85,6 +86,8 @@ export default class RendererProgram {
     text: CSS,
     parsed: undefined,
   };
+
+  tabState: TabState | undefined;
 
   constructor() {
     this.shruggieElement = createHintElement(SHRUGGIE);
@@ -285,6 +288,28 @@ export default class RendererProgram {
 
       case "Unrender":
         this.unrender();
+        break;
+
+      case "GetTabState":
+        this.sendMessage({
+          type: "TabStateResponse",
+          tabState: this.tabState,
+        });
+        break;
+
+      case "SetTabState":
+        this.tabState = message.tabState;
+        break;
+
+      case "HasTabState":
+        this.sendMessage({
+          type: "TabStateResponse",
+          tabState: this.tabState,
+        });
+        break;
+
+      case "DeleteTabState":
+        this.tabState = undefined;
         break;
     }
   }

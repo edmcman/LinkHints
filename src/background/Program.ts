@@ -15,7 +15,6 @@ import {
   HintsMode,
   KeyboardAction,
   KeyboardMapping,
-  KeyboardModeBackground,
   KeyboardModeWorker,
   NormalizedKeypress,
   PREVENT_OVERTYPING_ALLOWED_KEYBOARD_ACTIONS,
@@ -55,13 +54,13 @@ import {
   PartialOptions,
   unflattenOptions,
 } from "../shared/options";
-import {
-  MAX_PERF_ENTRIES,
-  Perf,
-  Stats,
-  TabsPerf,
-  TimeTracker,
-} from "../shared/perf";
+import { MAX_PERF_ENTRIES, TabsPerf, TimeTracker } from "../shared/perf";
+import type {
+  Highlighted,
+  HighlightedItem,
+  HintsState,
+  TabState,
+} from "../shared/state";
 import { bool, tweakable, unsignedInt } from "../shared/tweakable";
 
 type MessageInfo = {
@@ -69,72 +68,6 @@ type MessageInfo = {
   frameId: number;
   url: string | undefined;
 };
-
-type TabState = {
-  hintsState: HintsState;
-  keyboardMode: KeyboardModeBackground;
-  perf: Perf;
-  isOptionsPage: boolean;
-  isPinned: boolean;
-};
-
-type HintsState =
-  | {
-      type: "Collecting";
-      mode: HintsMode;
-      pendingElements: PendingElements;
-      startTime: number;
-      time: TimeTracker;
-      stats: Array<Stats>;
-      refreshing: boolean;
-      highlighted: Highlighted;
-    }
-  | {
-      type: "Hinting";
-      mode: HintsMode;
-      startTime: number;
-      time: TimeTracker;
-      stats: Array<Stats>;
-      enteredChars: string;
-      enteredText: string;
-      elementsWithHints: Array<ElementWithHint>;
-      highlighted: Highlighted;
-      updateState: UpdateState;
-      peeking: boolean;
-    }
-  | {
-      type: "Idle";
-      highlighted: Highlighted;
-    };
-
-// All HintsState types store the highlighted hints (highlighted due to being
-// matched, not due to filtering by text), so that they can stay highlighted for
-// `t.MATCH_HIGHLIGHT_DURATION` ms.
-type Highlighted = Array<HighlightedItem>;
-
-type HighlightedItem = {
-  sinceTimestamp: number;
-  element: ElementWithHint;
-};
-
-type PendingElements = {
-  pendingFrames: {
-    answering: number;
-    collecting: number;
-    lastStartWaitTimestamp: number;
-  };
-  elements: Array<ExtendedElementReport>;
-};
-
-type UpdateState =
-  | {
-      type: "WaitingForResponse";
-      lastUpdateStartTimestamp: number;
-    }
-  | {
-      type: "WaitingForTimeout";
-      lastUpdateStartTimestamp: number;
-    };
 
 type HintInput =
   | {
@@ -181,10 +114,71 @@ export const t = {
 
 export const tMeta = tweakable("Background", t);
 
+class TabController {
+  private tabId: number;
+
+  private cachedTabState: TabState | undefined;
+
+  constructor(tabId: number) {
+    this.tabId = tabId;
+  }
+
+  async getTabState(): Promise<TabState | undefined> {
+    if (this.cachedTabState !== undefined) {
+      return this.cachedTabState;
+    }
+    try {
+      const response = (await browser.tabs.sendMessage(this.tabId, {
+        type: "GetTabState",
+      } as const)) as FromRenderer;
+      if (response.type === "TabStateResponse") {
+        this.cachedTabState = response.tabState;
+        return response.tabState;
+      }
+    } catch (error) {
+      log("error", "TabController#getTabState", error);
+    }
+    return undefined;
+  }
+
+  async setTabState(tabState: TabState): Promise<void> {
+    this.cachedTabState = tabState;
+    try {
+      await browser.tabs.sendMessage(this.tabId, {
+        type: "SetTabState",
+        tabState,
+      } as const);
+    } catch (error) {
+      log("error", "TabController#setTabState", error);
+    }
+  }
+
+  async hasTabState(): Promise<boolean> {
+    const tabState = await this.getTabState();
+    return tabState !== undefined;
+  }
+
+  async deleteTabState(): Promise<boolean> {
+    this.cachedTabState = undefined;
+    try {
+      await browser.tabs.sendMessage(this.tabId, {
+        type: "DeleteTabState",
+      } as const);
+    } catch (error) {
+      log("error", "TabController#deleteTabState", error);
+    }
+    return true;
+  }
+
+  invalidateCache(): void {
+    this.cachedTabState = undefined;
+  }
+}
+
 export default class BackgroundProgram {
   options: OptionsData;
 
-  tabState = new Map<number, TabState>();
+  tabState = new Map<number, TabController>();
 
   restoredTabsPerf: TabsPerf = {};
 
@@ -223,7 +217,12 @@ export default class BackgroundProgram {
     this.resets.add(
       addListener(
         browser.runtime.onMessage,
-        this.onMessage.bind(this),
+        (message: ToBackground, sender: browser.runtime.MessageSender) => {
+          fireAndForget(
+            this.onMessage(message, sender),
+            "BackgroundProgram#onMessage"
+          );
+        },
         "BackgroundProgram#onMessage"
       ),
       addListener(
@@ -329,10 +328,8 @@ export default class BackgroundProgram {
     );
   }
 
-  sendOptionsMessage(message: ToOptions): void {
-    const optionsTabOpen = Array.from(this.tabState).some(
-      ([, tabState]) => tabState.isOptionsPage
-    );
+  async sendOptionsMessage(message: ToOptions): Promise<void> {
+    const optionsTabOpen = await this.hasOptionsTabOpen();
     // Trying to send a message to Options when no Options tab is open results
     // in "errors" being logged to the console.
     if (optionsTabOpen) {
@@ -343,6 +340,16 @@ export default class BackgroundProgram {
         message
       );
     }
+  }
+
+  private async hasOptionsTabOpen(): Promise<boolean> {
+    for (const controller of this.tabState.values()) {
+      const tabState = await controller.getTabState();
+      if (tabState?.isOptionsPage === true) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // This might seem like sending a message to oneself, but
@@ -384,56 +391,98 @@ export default class BackgroundProgram {
   // OptionsScriptAdded and RendererScriptAdded are all triggered very close to
   // each other. An overwrite can cause us to lose `tabState.isOptionsPage`,
   // breaking shortcuts customization.
-  onMessage(
+  async onMessage(
     message: ToBackground,
     sender: browser.runtime.MessageSender
-  ): void {
+  ): Promise<void> {
     // `info` can be missing when the message comes from for example the popup
     // (which isn’t associated with a tab). The worker script can even load in
     // an `about:blank` frame somewhere when hovering the browserAction!
     const info = makeMessageInfo(sender);
 
-    const tabStateRaw =
-      info === undefined ? undefined : this.tabState.get(info.tabId);
-    const tabState =
-      tabStateRaw === undefined ? makeEmptyTabState(info?.tabId) : tabStateRaw;
-
-    if (info !== undefined && tabStateRaw === undefined) {
-      const { [info.tabId.toString()]: perf = [] } = this.restoredTabsPerf;
-      tabState.perf = perf;
-      this.tabState.set(info.tabId, tabState);
+    if (info === undefined) {
+      // Handle messages not associated with a tab
+      switch (message.type) {
+        case "FromPopup":
+          fireAndForget(
+            this.onPopupMessage(message.message),
+            "BackgroundProgram#onPopupMessage",
+            message.message
+          );
+          break;
+        default:
+          log(
+            "error",
+            "Unexpected message type without tab info",
+            message.type
+          );
+          break;
+      }
+      return Promise.resolve();
     }
 
+    // For tab-associated messages, get or create controller
+    let controller!: TabController;
+    const existingController = this.tabState.get(info.tabId);
+    if (existingController === undefined) {
+      controller = new TabController(info.tabId);
+      this.tabState.set(info.tabId, controller);
+    } else {
+      controller = existingController;
+    }
+
+    // Controller is now guaranteed to be defined
+    return controller
+      .getTabState()
+      .then((tabState: TabState | undefined) => {
+        if (tabState === undefined) {
+          const localTabState = makeEmptyTabState(info.tabId);
+          const { [info.tabId.toString()]: perf = [] } = this.restoredTabsPerf;
+          localTabState.perf = perf;
+          return controller.setTabState(localTabState).then(() => {
+            this.handleMessageWithTabState(message, info, localTabState);
+          });
+        } else {
+          this.handleMessageWithTabState(message, info, tabState);
+          return;
+        }
+      })
+      .catch((error) => {
+        log("error", "BackgroundProgram#onMessage", error, message, info);
+      });
+  }
+
+  private handleMessageWithTabState(
+    message: ToBackground,
+    info: MessageInfo,
+    tabState: TabState
+  ): void {
     switch (message.type) {
       case "FromWorker":
-        if (info !== undefined) {
-          try {
-            this.onWorkerMessage(message.message, info, tabState);
-          } catch (error) {
-            log(
-              "error",
-              "BackgroundProgram#onWorkerMessage",
-              error,
-              message.message,
-              info
-            );
-          }
+        try {
+          this.onWorkerMessage(message.message, info, tabState);
+        } catch (error) {
+          log(
+            "error",
+            "BackgroundProgram#onWorkerMessage",
+            error,
+            message.message,
+            info
+          );
         }
         break;
 
       case "FromRenderer":
-        if (info !== undefined) {
-          try {
-            this.onRendererMessage(message.message, info, tabState);
-          } catch (error) {
-            log(
-              "error",
-              "BackgroundProgram#onRendererMessage",
-              error,
-              message.message,
-              info
-            );
-          }
+        try {
+          this.onRendererMessage(message.message, info, tabState);
+        } catch (error) {
+          log(
+            "error",
+            "BackgroundProgram#onRendererMessage",
+            error,
+            message.message,
+            info
+          );
         }
         break;
 
@@ -441,20 +490,17 @@ export default class BackgroundProgram {
         fireAndForget(
           this.onPopupMessage(message.message),
           "BackgroundProgram#onPopupMessage",
-          message.message,
-          info
+          message.message
         );
         break;
 
       case "FromOptions":
-        if (info !== undefined) {
-          fireAndForget(
-            this.onOptionsMessage(message.message, info, tabState),
-            "BackgroundProgram#onOptionsMessage",
-            message.message,
-            info
-          );
-        }
+        fireAndForget(
+          this.onOptionsMessage(message.message, info, tabState),
+          "BackgroundProgram#onOptionsMessage",
+          message.message,
+          info
+        );
         break;
     }
   }
@@ -465,7 +511,10 @@ export default class BackgroundProgram {
       if (info !== undefined) {
         // A frame was removed. If in hints mode, hide all hints for elements in
         // that frame.
-        this.hideElements(info);
+        fireAndForget(
+          this.hideElements(info),
+          "BackgroundProgram#onConnect->hideElements"
+        );
       }
     });
   }
@@ -496,17 +545,23 @@ export default class BackgroundProgram {
         break;
 
       case "NonKeyboardShortcutKeypress":
-        this.handleHintInput(info.tabId, message.timestamp, {
-          type: "Input",
-          keypress: message.keypress,
-        });
+        fireAndForget(
+          this.handleHintInput(info.tabId, message.timestamp, {
+            type: "Input",
+            keypress: message.keypress,
+          }),
+          "BackgroundProgram#onWorkerMessage->handleHintInput"
+        );
         break;
 
       case "KeypressCaptured":
-        this.sendOptionsMessage({
-          type: "KeypressCaptured",
-          keypress: message.keypress,
-        });
+        fireAndForget(
+          this.sendOptionsMessage({
+            type: "KeypressCaptured",
+            keypress: message.keypress,
+          }),
+          "BackgroundProgram#onWorkerMessage->sendOptionsMessage"
+        );
         break;
 
       case "ReportVisibleFrame": {
@@ -548,7 +603,10 @@ export default class BackgroundProgram {
         hintsState.stats.push(message.stats);
 
         if (message.numFrames === 0) {
-          this.maybeStartHinting(info.tabId);
+          fireAndForget(
+            this.maybeStartHinting(info.tabId),
+            "BackgroundProgram#onWorkerMessage->maybeStartHinting"
+          );
         } else {
           pendingFrames.lastStartWaitTimestamp = Date.now();
           this.setTimeout(info.tabId, t.FRAME_REPORT_TIMEOUT.value);
@@ -602,7 +660,10 @@ export default class BackgroundProgram {
           { tabId: info.tabId }
         );
 
-        this.updateBadge(info.tabId);
+        fireAndForget(
+          this.updateBadge(info.tabId),
+          "BackgroundProgram#onWorkerMessage->updateBadge"
+        );
 
         if (info.frameId === TOP_FRAME_ID) {
           const { updateState } = hintsState;
@@ -653,7 +714,10 @@ export default class BackgroundProgram {
         if (hintsState.type !== "Idle") {
           // Exit in “Delayed” mode so that the matched hints still show as
           // highlighted.
-          this.exitHintsMode({ tabId: info.tabId, delayed: true });
+          fireAndForget(
+            this.exitHintsMode({ tabId: info.tabId, delayed: true }),
+            "BackgroundProgram#onWorkerMessage->exitHintsMode"
+          );
         }
         break;
       }
@@ -668,7 +732,10 @@ export default class BackgroundProgram {
       case "TopPageHide": {
         const { hintsState } = tabState;
         if (hintsState.type !== "Idle") {
-          this.exitHintsMode({ tabId: info.tabId, sendMessages: false });
+          fireAndForget(
+            this.exitHintsMode({ tabId: info.tabId, sendMessages: false }),
+            "BackgroundProgram#onWorkerMessage->exitHintsMode"
+          );
         }
         break;
       }
@@ -724,11 +791,26 @@ export default class BackgroundProgram {
   }
 
   onTimeout(tabId: number): void {
-    this.updateBadge(tabId);
-    this.maybeStartHinting(tabId);
-    this.updateElements(tabId);
-    this.unhighlightHints(tabId);
-    this.stopPreventOvertyping(tabId);
+    fireAndForget(
+      this.updateBadge(tabId),
+      "BackgroundProgram#onTimeout->updateBadge"
+    );
+    fireAndForget(
+      this.maybeStartHinting(tabId),
+      "BackgroundProgram#onTimeout->maybeStartHinting"
+    );
+    fireAndForget(
+      this.updateElements(tabId),
+      "BackgroundProgram#onTimeout->updateElements"
+    );
+    fireAndForget(
+      this.unhighlightHints(tabId),
+      "BackgroundProgram#onTimeout->unhighlightHints"
+    );
+    fireAndForget(
+      this.stopPreventOvertyping(tabId),
+      "BackgroundProgram#onTimeout->stopPreventOvertyping"
+    );
   }
 
   getTextRects({
@@ -762,8 +844,16 @@ export default class BackgroundProgram {
     }
   }
 
-  handleHintInput(tabId: number, timestamp: number, input: HintInput): void {
-    const tabState = this.tabState.get(tabId);
+  async handleHintInput(
+    tabId: number,
+    timestamp: number,
+    input: HintInput
+  ): Promise<void> {
+    const proxy = this.tabState.get(tabId);
+    if (proxy === undefined) {
+      return;
+    }
+    const tabState = await proxy.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -860,7 +950,7 @@ export default class BackgroundProgram {
     const shouldContinue =
       match === undefined
         ? true
-        : this.handleHintMatch({
+        : await this.handleHintMatch({
             tabId,
             match,
             updates,
@@ -900,20 +990,26 @@ export default class BackgroundProgram {
         highlighted: hintsState.highlighted,
       };
       this.setTimeout(tabId, t.MATCH_HIGHLIGHT_DURATION.value);
-      this.updateWorkerStateAfterHintActivation({
-        tabId,
-        preventOverTyping,
-      });
+      fireAndForget(
+        this.updateWorkerStateAfterHintActivation({
+          tabId,
+          preventOverTyping,
+        }),
+        "BackgroundProgram#handleHintInput->updateWorkerStateAfterHintActivation"
+      );
     }
 
-    this.updateBadge(tabId);
+    fireAndForget(
+      this.updateBadge(tabId),
+      "BackgroundProgram#handleHintInput->updateBadge"
+    );
   }
 
   // Executes some action on the element of the matched hint. Returns whether
   // the "NonKeyboardShortcutKeypress" handler should continue with its default
   // implementation for updating hintsState and sending messages or not. Some
   // hint modes handle that themselves.
-  handleHintMatch({
+  async handleHintMatch({
     tabId,
     match,
     updates,
@@ -927,10 +1023,14 @@ export default class BackgroundProgram {
     preventOverTyping: boolean;
     alt: boolean;
     timestamp: number;
-  }): boolean {
-    const tabState = this.tabState.get(tabId);
+  }): Promise<boolean> {
+    const proxy = this.tabState.get(tabId);
+    if (proxy === undefined) {
+      return Promise.resolve(true);
+    }
+    const tabState = await proxy.getTabState();
     if (tabState === undefined) {
-      return true;
+      return Promise.resolve(true);
     }
 
     const { hintsState } = tabState;
@@ -1003,16 +1103,22 @@ export default class BackgroundProgram {
         // initially.
         this.sendRendererMessage({ type: "RemoveShruggie" }, { tabId });
 
-        this.updateWorkerStateAfterHintActivation({
-          tabId,
-          preventOverTyping,
-        });
+        fireAndForget(
+          this.updateWorkerStateAfterHintActivation({
+            tabId,
+            preventOverTyping,
+          }),
+          "BackgroundProgram#handleHintMatch->updateWorkerStateAfterHintActivation"
+        );
 
-        this.enterHintsMode({
-          tabId,
-          timestamp,
-          mode: hintsState.mode,
-        });
+        fireAndForget(
+          this.enterHintsMode({
+            tabId,
+            timestamp,
+            mode: hintsState.mode,
+          }),
+          "BackgroundProgram#handleHintMatch->enterHintsMode"
+        );
 
         this.setTimeout(tabId, t.MATCH_HIGHLIGHT_DURATION.value);
 
@@ -1073,12 +1179,18 @@ export default class BackgroundProgram {
           { tabId }
         );
 
-        this.updateWorkerStateAfterHintActivation({
-          tabId,
-          preventOverTyping,
-        });
+        fireAndForget(
+          this.updateWorkerStateAfterHintActivation({
+            tabId,
+            preventOverTyping,
+          }),
+          "BackgroundProgram#handleHintInput->updateWorkerStateAfterHintActivation"
+        );
 
-        this.updateBadge(tabId);
+        fireAndForget(
+          this.updateBadge(tabId),
+          "BackgroundProgram#handleHintInput->updateBadge"
+        );
         this.setTimeout(tabId, t.MATCH_HIGHLIGHT_DURATION.value);
 
         return false;
@@ -1132,8 +1244,12 @@ export default class BackgroundProgram {
     }
   }
 
-  refreshHintsRendering(tabId: number): void {
-    const tabState = this.tabState.get(tabId);
+  async refreshHintsRendering(tabId: number): Promise<void> {
+    const proxy = this.tabState.get(tabId);
+    if (proxy === undefined) {
+      return;
+    }
+    const tabState = await proxy.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -1168,7 +1284,10 @@ export default class BackgroundProgram {
       { tabId }
     );
 
-    this.updateBadge(tabId);
+    fireAndForget(
+      this.updateBadge(tabId),
+      "BackgroundProgram#maybeStartHinting->updateBadge"
+    );
   }
 
   openNewTab({
@@ -1244,8 +1363,12 @@ export default class BackgroundProgram {
     }
   }
 
-  maybeStartHinting(tabId: number): void {
-    const tabState = this.tabState.get(tabId);
+  async maybeStartHinting(tabId: number): Promise<void> {
+    const proxy = this.tabState.get(tabId);
+    if (proxy === undefined) {
+      return;
+    }
+    const tabState = await proxy.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -1370,11 +1493,18 @@ export default class BackgroundProgram {
       },
       { tabId }
     );
-    this.updateBadge(tabId);
+    fireAndForget(
+      this.updateBadge(tabId),
+      "BackgroundProgram#updateElements->updateBadge"
+    );
   }
 
-  updateElements(tabId: number): void {
-    const tabState = this.tabState.get(tabId);
+  async updateElements(tabId: number): Promise<void> {
+    const proxy = this.tabState.get(tabId);
+    if (proxy === undefined) {
+      return;
+    }
+    const tabState = await proxy.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -1394,11 +1524,14 @@ export default class BackgroundProgram {
       t.UPDATE_INTERVAL.value
     ) {
       if (hintsState.elementsWithHints.every((element) => element.hidden)) {
-        this.enterHintsMode({
-          tabId,
-          timestamp: Date.now(),
-          mode: hintsState.mode,
-        });
+        fireAndForget(
+          this.enterHintsMode({
+            tabId,
+            timestamp: Date.now(),
+            mode: hintsState.mode,
+          }),
+          "BackgroundProgram#updateElements->enterHintsMode"
+        );
       } else {
         hintsState.updateState = {
           type: "WaitingForResponse",
@@ -1422,8 +1555,12 @@ export default class BackgroundProgram {
     }
   }
 
-  hideElements(info: MessageInfo): void {
-    const tabState = this.tabState.get(info.tabId);
+  async hideElements(info: MessageInfo): Promise<void> {
+    const controller = this.tabState.get(info.tabId);
+    if (controller === undefined) {
+      return;
+    }
+    const tabState = await controller.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -1486,7 +1623,10 @@ export default class BackgroundProgram {
       { tabId: info.tabId }
     );
 
-    this.updateBadge(info.tabId);
+    fireAndForget(
+      this.updateBadge(info.tabId),
+      "BackgroundProgram#onRendererMessage->updateBadge"
+    );
   }
 
   onRendererMessage(
@@ -1551,12 +1691,19 @@ export default class BackgroundProgram {
           },
           ...tabState.perf,
         ].slice(0, MAX_PERF_ENTRIES);
-        this.sendOptionsMessage({
-          type: "PerfUpdate",
-          perf: { [info.tabId]: tabState.perf },
-        });
+        fireAndForget(
+          this.sendOptionsMessage({
+            type: "PerfUpdate",
+            perf: { [info.tabId]: tabState.perf },
+          }),
+          "BackgroundProgram#onRendererMessage->sendOptionsMessage"
+        );
         break;
       }
+
+      default:
+        log("error", "Unexpected FromRenderer message type", message.type);
+        break;
     }
   }
 
@@ -1589,18 +1736,32 @@ export default class BackgroundProgram {
       case "OptionsScriptAdded": {
         tabState.isOptionsPage = true;
         this.updateOptionsPageData();
-        this.sendOptionsMessage({
-          type: "StateSync",
-          logLevel: log.level,
-          options: this.options,
-        });
-        const perf = Object.fromEntries(
-          Array.from(this.tabState, ([tabId, tabState2]) => [
-            tabId.toString(),
-            tabState2.perf,
-          ])
+        fireAndForget(
+          this.sendOptionsMessage({
+            type: "StateSync",
+            logLevel: log.level,
+            options: this.options,
+          }),
+          "BackgroundProgram#onOptionsMessage->sendOptionsMessage"
         );
-        this.sendOptionsMessage({ type: "PerfUpdate", perf });
+        const perf = Object.fromEntries(
+          await Promise.all(
+            Array.from(this.tabState, async ([tabId, controller]) => {
+              const currentTabState = await controller.getTabState();
+              return [
+                tabId.toString(),
+                (currentTabState?.perf as Array<unknown>) ?? [],
+              ];
+            })
+          )
+        ) as Record<string, Array<unknown>>;
+        fireAndForget(
+          this.sendOptionsMessage({
+            type: "PerfUpdate",
+            perf: perf as TabsPerf,
+          }),
+          "BackgroundProgram#onOptionsMessage->sendOptionsMessage"
+        );
         break;
       }
 
@@ -1615,9 +1776,14 @@ export default class BackgroundProgram {
         break;
 
       case "ResetPerf":
-        for (const tabState2 of this.tabState.values()) {
-          tabState2.perf = [];
-        }
+        await Promise.all(
+          Array.from(this.tabState.values(), async (controller) => {
+            const currentTabState = await controller.getTabState();
+            if (currentTabState !== undefined) {
+              currentTabState.perf = [];
+            }
+          })
+        );
         if (!PROD) {
           await browser.storage.local.remove("perf");
         }
@@ -1641,11 +1807,14 @@ export default class BackgroundProgram {
     timestamp: number
   ): void {
     const enterHintsMode = (mode: HintsMode): void => {
-      this.enterHintsMode({
-        tabId: info.tabId,
-        timestamp,
-        mode,
-      });
+      fireAndForget(
+        this.enterHintsMode({
+          tabId: info.tabId,
+          timestamp,
+          mode,
+        }),
+        "BackgroundProgram#onKeyboardShortcut->enterHintsMode"
+      );
     };
 
     switch (action) {
@@ -1674,7 +1843,10 @@ export default class BackgroundProgram {
         break;
 
       case "ExitHintsMode":
-        this.exitHintsMode({ tabId: info.tabId });
+        fireAndForget(
+          this.exitHintsMode({ tabId: info.tabId }),
+          "BackgroundProgram#onKeyboardShortcut->exitHintsMode"
+        );
         break;
 
       case "RotateHintsForward":
@@ -1698,48 +1870,69 @@ export default class BackgroundProgram {
         break;
 
       case "RefreshHints": {
-        const tabState = this.tabState.get(info.tabId);
-        if (tabState === undefined) {
-          return;
-        }
+        fireAndForget(
+          (async () => {
+            const controller = this.tabState.get(info.tabId);
+            if (controller === undefined) {
+              return;
+            }
+            const tabState = await controller.getTabState();
+            if (tabState === undefined) {
+              return;
+            }
 
-        const { hintsState } = tabState;
-        if (hintsState.type !== "Hinting") {
-          return;
-        }
+            const { hintsState } = tabState;
+            if (hintsState.type !== "Hinting") {
+              return;
+            }
 
-        // Refresh `oneTimeWindowMessageToken`.
-        this.sendWorkerMessage(this.makeWorkerState(tabState), {
-          tabId: info.tabId,
-          frameId: "all_frames",
-        });
+            // Refresh `oneTimeWindowMessageToken`.
+            this.sendWorkerMessage(this.makeWorkerState(tabState), {
+              tabId: info.tabId,
+              frameId: "all_frames",
+            });
 
-        enterHintsMode(hintsState.mode);
+            enterHintsMode(hintsState.mode);
+          })(),
+          "BackgroundProgram#onKeyboardShortcut->RefreshHints"
+        );
         break;
       }
 
       case "TogglePeek": {
-        const tabState = this.tabState.get(info.tabId);
-        if (tabState === undefined) {
-          return;
-        }
+        fireAndForget(
+          (async () => {
+            const controller = this.tabState.get(info.tabId);
+            if (controller === undefined) {
+              return;
+            }
+            const tabState = await controller.getTabState();
+            if (tabState === undefined) {
+              return;
+            }
 
-        const { hintsState } = tabState;
-        if (hintsState.type !== "Hinting") {
-          return;
-        }
+            const { hintsState } = tabState;
+            if (hintsState.type !== "Hinting") {
+              return;
+            }
 
-        this.sendRendererMessage(
-          hintsState.peeking ? { type: "Unpeek" } : { type: "Peek" },
-          { tabId: info.tabId }
+            this.sendRendererMessage(
+              hintsState.peeking ? { type: "Unpeek" } : { type: "Peek" },
+              { tabId: info.tabId }
+            );
+
+            hintsState.peeking = !hintsState.peeking;
+          })(),
+          "BackgroundProgram#onKeyboardShortcut->TogglePeek"
         );
-
-        hintsState.peeking = !hintsState.peeking;
         break;
       }
 
       case "Escape":
-        this.exitHintsMode({ tabId: info.tabId });
+        fireAndForget(
+          this.exitHintsMode({ tabId: info.tabId }),
+          "BackgroundProgram#onKeyboardShortcut->exitHintsMode"
+        );
         this.sendWorkerMessage(
           { type: "Escape" },
           { tabId: info.tabId, frameId: "all_frames" }
@@ -1747,21 +1940,30 @@ export default class BackgroundProgram {
         break;
 
       case "ActivateHint":
-        this.handleHintInput(info.tabId, timestamp, {
-          type: "ActivateHint",
-          alt: false,
-        });
+        fireAndForget(
+          this.handleHintInput(info.tabId, timestamp, {
+            type: "ActivateHint",
+            alt: false,
+          }),
+          "BackgroundProgram#onRendererMessage->handleHintInput"
+        );
         break;
 
       case "ActivateHintAlt":
-        this.handleHintInput(info.tabId, timestamp, {
-          type: "ActivateHint",
-          alt: true,
-        });
+        fireAndForget(
+          this.handleHintInput(info.tabId, timestamp, {
+            type: "ActivateHint",
+            alt: true,
+          }),
+          "BackgroundProgram#onRendererMessage->handleHintInput"
+        );
         break;
 
       case "Backspace":
-        this.handleHintInput(info.tabId, timestamp, { type: "Backspace" });
+        fireAndForget(
+          this.handleHintInput(info.tabId, timestamp, { type: "Backspace" }),
+          "BackgroundProgram#onRendererMessage->handleHintInput"
+        );
         break;
 
       case "ReverseSelection":
@@ -1773,7 +1975,7 @@ export default class BackgroundProgram {
     }
   }
 
-  enterHintsMode({
+  async enterHintsMode({
     tabId,
     timestamp,
     mode,
@@ -1781,8 +1983,12 @@ export default class BackgroundProgram {
     tabId: number;
     timestamp: number;
     mode: HintsMode;
-  }): void {
-    const tabState = this.tabState.get(tabId);
+  }): Promise<void> {
+    const controller = this.tabState.get(tabId);
+    if (controller === undefined) {
+      return;
+    }
+    const tabState = await controller.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -1821,11 +2027,14 @@ export default class BackgroundProgram {
       highlighted: tabState.hintsState.highlighted,
     };
 
-    this.updateBadge(tabId);
+    fireAndForget(
+      this.updateBadge(tabId),
+      "BackgroundProgram#exitHintsMode->updateBadge"
+    );
     this.setTimeout(tabId, t.BADGE_COLLECTING_DELAY.value);
   }
 
-  exitHintsMode({
+  async exitHintsMode({
     tabId,
     delayed = false,
     sendMessages = true,
@@ -1833,8 +2042,12 @@ export default class BackgroundProgram {
     tabId: number;
     delayed?: boolean;
     sendMessages?: boolean;
-  }): void {
-    const tabState = this.tabState.get(tabId);
+  }): Promise<void> {
+    const controller = this.tabState.get(tabId);
+    if (controller === undefined) {
+      return;
+    }
+    const tabState = await controller.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -1859,11 +2072,18 @@ export default class BackgroundProgram {
       });
     }
 
-    this.updateBadge(tabId);
+    fireAndForget(
+      this.updateBadge(tabId),
+      "BackgroundProgram#exitHintsMode->updateBadge"
+    );
   }
 
-  unhighlightHints(tabId: number): void {
-    const tabState = this.tabState.get(tabId);
+  async unhighlightHints(tabId: number): Promise<void> {
+    const proxy = this.tabState.get(tabId);
+    if (proxy === undefined) {
+      return;
+    }
+    const tabState = await proxy.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -1904,7 +2124,10 @@ export default class BackgroundProgram {
           { tabId }
         );
         if (refresh) {
-          this.refreshHintsRendering(tabId);
+          fireAndForget(
+            this.refreshHintsRendering(tabId),
+            "BackgroundProgram#hideElements->refreshHintsRendering"
+          );
         }
       }
     };
@@ -1928,8 +2151,12 @@ export default class BackgroundProgram {
     }
   }
 
-  stopPreventOvertyping(tabId: number): void {
-    const tabState = this.tabState.get(tabId);
+  async stopPreventOvertyping(tabId: number): Promise<void> {
+    const controller = this.tabState.get(tabId);
+    if (controller === undefined) {
+      return;
+    }
+    const tabState = await controller.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -1974,47 +2201,69 @@ export default class BackgroundProgram {
       );
     }
 
-    const tabState = this.tabState.get(tabId);
-    if (tabState !== undefined && changeInfo.status === "loading") {
-      tabState.isOptionsPage = false;
-      this.updateOptionsPageData();
-    }
+    const controller = this.tabState.get(tabId);
+    if (controller !== undefined) {
+      fireAndForget(
+        (async () => {
+          const tabState = await controller.getTabState();
+          if (tabState !== undefined) {
+            if (changeInfo.status === "loading") {
+              tabState.isOptionsPage = false;
+              this.updateOptionsPageData();
+            }
 
-    if (tabState !== undefined && changeInfo.pinned !== undefined) {
-      tabState.isPinned = changeInfo.pinned;
-      this.sendWorkerMessage(this.makeWorkerState(tabState), {
-        tabId,
-        frameId: "all_frames",
-      });
+            if (changeInfo.pinned !== undefined) {
+              tabState.isPinned = changeInfo.pinned;
+              this.sendWorkerMessage(this.makeWorkerState(tabState), {
+                tabId,
+                frameId: "all_frames",
+              });
+            }
+          }
+        })(),
+        "BackgroundProgram#onTabUpdated->handleTabState",
+        tabId
+      );
     }
   }
 
   onTabRemoved(tabId: number): void {
-    this.deleteTabState(tabId);
+    fireAndForget(
+      this.deleteTabState(tabId),
+      "BackgroundProgram#onTabRemoved->deleteTabState"
+    );
   }
 
-  deleteTabState(tabId: number): void {
-    const tabState = this.tabState.get(tabId);
-    if (tabState === undefined) {
+  async deleteTabState(tabId: number): Promise<void> {
+    const controller = this.tabState.get(tabId);
+    if (controller === undefined) {
       return;
     }
 
+    const tabState = await controller.getTabState();
     this.tabState.delete(tabId);
 
-    if (!tabState.isOptionsPage) {
-      this.sendOptionsMessage({
-        type: "PerfUpdate",
-        perf: { [tabId]: [] },
-      });
+    if (tabState !== undefined && !tabState.isOptionsPage) {
+      fireAndForget(
+        this.sendOptionsMessage({
+          type: "PerfUpdate",
+          perf: { [tabId]: [] },
+        }),
+        "BackgroundProgram#deleteTabState->sendOptionsMessage"
+      );
     }
 
     this.updateOptionsPageData();
   }
 
   async updateIcon(tabId: number): Promise<void> {
+    const controller = this.tabState.get(tabId);
+    if (controller === undefined) {
+      return;
+    }
     // In Chrome the below check fails for the extension options page, so check
     // for the options page explicitly.
-    const tabState = this.tabState.get(tabId);
+    const tabState = await controller.getTabState();
     let enabled = tabState !== undefined ? tabState.isOptionsPage : false;
 
     // Check if we’re allowed to execute content scripts on this page.
@@ -2036,8 +2285,12 @@ export default class BackgroundProgram {
     await browser.browserAction.setIcon({ path: icons, tabId });
   }
 
-  updateBadge(tabId: number): void {
-    const tabState = this.tabState.get(tabId);
+  async updateBadge(tabId: number): Promise<void> {
+    const controller = this.tabState.get(tabId);
+    if (controller === undefined) {
+      return;
+    }
+    const tabState = await controller.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -2136,14 +2389,21 @@ export default class BackgroundProgram {
   }
 
   updateTabsAfterOptionsChange(): void {
-    this.sendOptionsMessage({
-      type: "StateSync",
-      logLevel: log.level,
-      options: this.options,
-    });
+    fireAndForget(
+      this.sendOptionsMessage({
+        type: "StateSync",
+        logLevel: log.level,
+        options: this.options,
+      }),
+      "BackgroundProgram#updateTabsAfterOptionsChange->sendOptionsMessage"
+    );
     for (const tabId of this.tabState.keys()) {
       // This also does a "StateSync" for all workers.
-      this.exitHintsMode({ tabId });
+      // This also does a "StateSync" for all workers.
+      fireAndForget(
+        this.exitHintsMode({ tabId }),
+        "BackgroundProgram#updateTabsAfterOptionsChange->exitHintsMode"
+      );
       this.sendRendererMessage(
         {
           type: "StateSync",
@@ -2214,14 +2474,18 @@ export default class BackgroundProgram {
   // by text filtering, prevent “over-typing” (continued typing after the hint
   // got matched, before realizing it got matched) by temporarily removing all
   // keyboard shortcuts and suppressing all key presses for a short time.
-  updateWorkerStateAfterHintActivation({
+  async updateWorkerStateAfterHintActivation({
     tabId,
     preventOverTyping,
   }: {
     tabId: number;
     preventOverTyping: boolean;
-  }): void {
-    const tabState = this.tabState.get(tabId);
+  }): Promise<void> {
+    const controller = this.tabState.get(tabId);
+    if (controller === undefined) {
+      return;
+    }
+    const tabState = await controller.getTabState();
     if (tabState === undefined) {
       return;
     }
@@ -2243,11 +2507,18 @@ export default class BackgroundProgram {
   updateOptionsPageData(): void {
     if (!PROD) {
       const run = async (): Promise<void> => {
-        const optionsTabState = Array.from(this.tabState).filter(
-          ([, tabState]) => tabState.isOptionsPage
+        const optionsTabControllers = Array.from(this.tabState);
+        const optionsTabStates = await Promise.all(
+          optionsTabControllers.map(async ([tabId, controller]) => {
+            const tabState = await controller.getTabState();
+            return tabState?.isOptionsPage === true ? tabId : null;
+          })
         );
+        const optionsTabIds = optionsTabStates.filter(
+          (id) => id !== null
+        ) as Array<number>;
         let isActive = false;
-        for (const [tabId] of optionsTabState) {
+        for (const tabId of optionsTabIds) {
           try {
             const tab = await browser.tabs.get(tabId);
             if (tab.active) {
@@ -2258,7 +2529,7 @@ export default class BackgroundProgram {
             // Tab was not found. Try the next one.
           }
         }
-        if (optionsTabState.length > 0) {
+        if (optionsTabIds.length > 0) {
           await browser.storage.local.set({ optionsPage: isActive });
         } else {
           await browser.storage.local.remove("optionsPage");
