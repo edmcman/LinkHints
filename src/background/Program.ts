@@ -1047,6 +1047,26 @@ export default class BackgroundProgram {
         ? "ForegroundTab"
         : hintsState.mode;
 
+    const openTab = (foreground: boolean): void => {
+      if (url === undefined) {
+        log(
+          "error",
+          `Cannot open ${
+            foreground ? "foreground" : "background"
+          } tab due to missing URL`,
+          match
+        );
+        return;
+      }
+      this.openNewTab({
+        url,
+        elementIndex: match.frame.index,
+        tabId,
+        frameId: match.frame.id,
+        foreground,
+      });
+    };
+
     switch (mode) {
       case "Click":
         this.sendWorkerMessage(
@@ -1199,31 +1219,11 @@ export default class BackgroundProgram {
       }
 
       case "BackgroundTab":
-        if (url === undefined) {
-          log("error", "Cannot open background tab due to missing URL", match);
-          return true;
-        }
-        this.openNewTab({
-          url,
-          elementIndex: match.frame.index,
-          tabId,
-          frameId: match.frame.id,
-          foreground: false,
-        });
+        openTab(false);
         return true;
 
       case "ForegroundTab":
-        if (url === undefined) {
-          log("error", "Cannot open foreground tab due to missing URL", match);
-          return true;
-        }
-        this.openNewTab({
-          url,
-          elementIndex: match.frame.index,
-          tabId,
-          frameId: match.frame.id,
-          foreground: true,
-        });
+        openTab(true);
         return true;
 
       case "Select":
@@ -1796,6 +1796,13 @@ export default class BackgroundProgram {
       );
     };
 
+    const handleHintAction = (input: HintInput): void => {
+      fireAndForget(
+        this.handleHintInput(info.tabId, timestamp, input),
+        "BackgroundProgram#onKeyboardShortcut->handleHintInput"
+      );
+    };
+
     switch (action) {
       case "EnterHintsMode_Click":
         enterHintsMode("Click");
@@ -1848,64 +1855,19 @@ export default class BackgroundProgram {
         );
         break;
 
-      case "RefreshHints": {
+      case "RefreshHints":
         fireAndForget(
-          (async () => {
-            const controller = this.tabState.get(info.tabId);
-            if (controller === undefined) {
-              return;
-            }
-            const tabState = await controller.getTabState();
-            if (tabState === undefined) {
-              return;
-            }
-
-            const { hintsState } = tabState;
-            if (hintsState.type !== "Hinting") {
-              return;
-            }
-
-            // Refresh `oneTimeWindowMessageToken`.
-            this.sendWorkerMessage(this.makeWorkerState(tabState), {
-              tabId: info.tabId,
-              frameId: "all_frames",
-            });
-
-            enterHintsMode(hintsState.mode);
-          })(),
+          this.refreshHints(info.tabId, enterHintsMode),
           "BackgroundProgram#onKeyboardShortcut->RefreshHints"
         );
         break;
-      }
 
-      case "TogglePeek": {
+      case "TogglePeek":
         fireAndForget(
-          (async () => {
-            const controller = this.tabState.get(info.tabId);
-            if (controller === undefined) {
-              return;
-            }
-            const tabState = await controller.getTabState();
-            if (tabState === undefined) {
-              return;
-            }
-
-            const { hintsState } = tabState;
-            if (hintsState.type !== "Hinting") {
-              return;
-            }
-
-            this.sendRendererMessage(
-              hintsState.peeking ? { type: "Unpeek" } : { type: "Peek" },
-              { tabId: info.tabId }
-            );
-
-            hintsState.peeking = !hintsState.peeking;
-          })(),
+          this.togglePeek(info.tabId),
           "BackgroundProgram#onKeyboardShortcut->TogglePeek"
         );
         break;
-      }
 
       case "Escape":
         fireAndForget(
@@ -1919,30 +1881,15 @@ export default class BackgroundProgram {
         break;
 
       case "ActivateHint":
-        fireAndForget(
-          this.handleHintInput(info.tabId, timestamp, {
-            type: "ActivateHint",
-            alt: false,
-          }),
-          "BackgroundProgram#onRendererMessage->handleHintInput"
-        );
+        handleHintAction({ type: "ActivateHint", alt: false });
         break;
 
       case "ActivateHintAlt":
-        fireAndForget(
-          this.handleHintInput(info.tabId, timestamp, {
-            type: "ActivateHint",
-            alt: true,
-          }),
-          "BackgroundProgram#onRendererMessage->handleHintInput"
-        );
+        handleHintAction({ type: "ActivateHint", alt: true });
         break;
 
       case "Backspace":
-        fireAndForget(
-          this.handleHintInput(info.tabId, timestamp, { type: "Backspace" }),
-          "BackgroundProgram#onRendererMessage->handleHintInput"
-        );
+        handleHintAction({ type: "Backspace" });
         break;
 
       case "ReverseSelection":
@@ -1952,6 +1899,48 @@ export default class BackgroundProgram {
         );
         break;
     }
+  }
+
+  private async refreshHints(
+    tabId: number,
+    enterHintsMode: (mode: HintsMode) => void
+  ): Promise<void> {
+    const tabState = await this.getTabState(tabId);
+    if (tabState === undefined) {
+      return;
+    }
+
+    const { hintsState } = tabState;
+    if (hintsState.type !== "Hinting") {
+      return;
+    }
+
+    // Refresh `oneTimeWindowMessageToken`.
+    this.sendWorkerMessage(this.makeWorkerState(tabState), {
+      tabId,
+      frameId: "all_frames",
+    });
+
+    enterHintsMode(hintsState.mode);
+  }
+
+  private async togglePeek(tabId: number): Promise<void> {
+    const tabState = await this.getTabState(tabId);
+    if (tabState === undefined) {
+      return;
+    }
+
+    const { hintsState } = tabState;
+    if (hintsState.type !== "Hinting") {
+      return;
+    }
+
+    this.sendRendererMessage(
+      hintsState.peeking ? { type: "Unpeek" } : { type: "Peek" },
+      { tabId }
+    );
+
+    hintsState.peeking = !hintsState.peeking;
   }
 
   async enterHintsMode({
