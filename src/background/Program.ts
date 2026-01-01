@@ -198,6 +198,23 @@ export default class BackgroundProgram {
     };
   }
 
+  private async getTabState(tabId: number): Promise<TabState | undefined> {
+    const controller = this.tabState.get(tabId);
+    if (controller === undefined) {
+      return undefined;
+    }
+    return controller.getTabState();
+  }
+
+  private getController(tabId: number): TabController {
+    let controller = this.tabState.get(tabId);
+    if (controller === undefined) {
+      controller = new TabController(tabId);
+      this.tabState.set(tabId, controller);
+    }
+    return controller;
+  }
+
   async start(): Promise<void> {
     log("log", "BackgroundProgram#start", BROWSER, PROD);
 
@@ -422,14 +439,7 @@ export default class BackgroundProgram {
     }
 
     // For tab-associated messages, get or create controller
-    let controller!: TabController;
-    const existingController = this.tabState.get(info.tabId);
-    if (existingController === undefined) {
-      controller = new TabController(info.tabId);
-      this.tabState.set(info.tabId, controller);
-    } else {
-      controller = existingController;
-    }
+    const controller = this.getController(info.tabId);
 
     // Controller is now guaranteed to be defined
     return controller
@@ -849,11 +859,7 @@ export default class BackgroundProgram {
     timestamp: number,
     input: HintInput
   ): Promise<void> {
-    const proxy = this.tabState.get(tabId);
-    if (proxy === undefined) {
-      return;
-    }
-    const tabState = await proxy.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -1024,11 +1030,7 @@ export default class BackgroundProgram {
     alt: boolean;
     timestamp: number;
   }): Promise<boolean> {
-    const proxy = this.tabState.get(tabId);
-    if (proxy === undefined) {
-      return Promise.resolve(true);
-    }
-    const tabState = await proxy.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return Promise.resolve(true);
     }
@@ -1245,11 +1247,7 @@ export default class BackgroundProgram {
   }
 
   async refreshHintsRendering(tabId: number): Promise<void> {
-    const proxy = this.tabState.get(tabId);
-    if (proxy === undefined) {
-      return;
-    }
-    const tabState = await proxy.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -1364,11 +1362,7 @@ export default class BackgroundProgram {
   }
 
   async maybeStartHinting(tabId: number): Promise<void> {
-    const proxy = this.tabState.get(tabId);
-    if (proxy === undefined) {
-      return;
-    }
-    const tabState = await proxy.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -1500,11 +1494,7 @@ export default class BackgroundProgram {
   }
 
   async updateElements(tabId: number): Promise<void> {
-    const proxy = this.tabState.get(tabId);
-    if (proxy === undefined) {
-      return;
-    }
-    const tabState = await proxy.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -1556,11 +1546,7 @@ export default class BackgroundProgram {
   }
 
   async hideElements(info: MessageInfo): Promise<void> {
-    const controller = this.tabState.get(info.tabId);
-    if (controller === undefined) {
-      return;
-    }
-    const tabState = await controller.getTabState();
+    const tabState = await this.getTabState(info.tabId);
     if (tabState === undefined) {
       return;
     }
@@ -1744,17 +1730,12 @@ export default class BackgroundProgram {
           }),
           "BackgroundProgram#onOptionsMessage->sendOptionsMessage"
         );
-        const perf = Object.fromEntries(
-          await Promise.all(
-            Array.from(this.tabState, async ([tabId, controller]) => {
-              const currentTabState = await controller.getTabState();
-              return [
-                tabId.toString(),
-                (currentTabState?.perf as Array<unknown>) ?? [],
-              ];
-            })
-          )
-        ) as Record<string, Array<unknown>>;
+        const perf: Record<string, Array<unknown>> = {};
+        for (const [tabId, controller] of this.tabState) {
+          const currentTabState = await controller.getTabState();
+          perf[tabId.toString()] =
+            (currentTabState?.perf as Array<unknown>) ?? [];
+        }
         fireAndForget(
           this.sendOptionsMessage({
             type: "PerfUpdate",
@@ -1776,14 +1757,12 @@ export default class BackgroundProgram {
         break;
 
       case "ResetPerf":
-        await Promise.all(
-          Array.from(this.tabState.values(), async (controller) => {
-            const currentTabState = await controller.getTabState();
-            if (currentTabState !== undefined) {
-              currentTabState.perf = [];
-            }
-          })
-        );
+        for (const controller of this.tabState.values()) {
+          const currentTabState = await controller.getTabState();
+          if (currentTabState !== undefined) {
+            currentTabState.perf = [];
+          }
+        }
         if (!PROD) {
           await browser.storage.local.remove("perf");
         }
@@ -1984,11 +1963,7 @@ export default class BackgroundProgram {
     timestamp: number;
     mode: HintsMode;
   }): Promise<void> {
-    const controller = this.tabState.get(tabId);
-    if (controller === undefined) {
-      return;
-    }
-    const tabState = await controller.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -2043,11 +2018,7 @@ export default class BackgroundProgram {
     delayed?: boolean;
     sendMessages?: boolean;
   }): Promise<void> {
-    const controller = this.tabState.get(tabId);
-    if (controller === undefined) {
-      return;
-    }
-    const tabState = await controller.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -2079,11 +2050,7 @@ export default class BackgroundProgram {
   }
 
   async unhighlightHints(tabId: number): Promise<void> {
-    const proxy = this.tabState.get(tabId);
-    if (proxy === undefined) {
-      return;
-    }
-    const tabState = await proxy.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -2152,11 +2119,7 @@ export default class BackgroundProgram {
   }
 
   async stopPreventOvertyping(tabId: number): Promise<void> {
-    const controller = this.tabState.get(tabId);
-    if (controller === undefined) {
-      return;
-    }
-    const tabState = await controller.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -2205,7 +2168,7 @@ export default class BackgroundProgram {
     if (controller !== undefined) {
       fireAndForget(
         (async () => {
-          const tabState = await controller.getTabState();
+          const tabState = await this.getTabState(tabId);
           if (tabState !== undefined) {
             if (changeInfo.status === "loading") {
               tabState.isOptionsPage = false;
@@ -2235,11 +2198,7 @@ export default class BackgroundProgram {
   }
 
   async deleteTabState(tabId: number): Promise<void> {
-    const controller = this.tabState.get(tabId);
-    if (controller === undefined) {
-      return;
-    }
-
+    const controller = this.getController(tabId);
     const tabState = await controller.getTabState();
     this.tabState.delete(tabId);
 
@@ -2257,10 +2216,7 @@ export default class BackgroundProgram {
   }
 
   async updateIcon(tabId: number): Promise<void> {
-    const controller = this.tabState.get(tabId);
-    if (controller === undefined) {
-      return;
-    }
+    const controller = this.getController(tabId);
     // In Chrome the below check fails for the extension options page, so check
     // for the options page explicitly.
     const tabState = await controller.getTabState();
@@ -2286,11 +2242,7 @@ export default class BackgroundProgram {
   }
 
   async updateBadge(tabId: number): Promise<void> {
-    const controller = this.tabState.get(tabId);
-    if (controller === undefined) {
-      return;
-    }
-    const tabState = await controller.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -2481,11 +2433,7 @@ export default class BackgroundProgram {
     tabId: number;
     preventOverTyping: boolean;
   }): Promise<void> {
-    const controller = this.tabState.get(tabId);
-    if (controller === undefined) {
-      return;
-    }
-    const tabState = await controller.getTabState();
+    const tabState = await this.getTabState(tabId);
     if (tabState === undefined) {
       return;
     }
@@ -2507,16 +2455,13 @@ export default class BackgroundProgram {
   updateOptionsPageData(): void {
     if (!PROD) {
       const run = async (): Promise<void> => {
-        const optionsTabControllers = Array.from(this.tabState);
-        const optionsTabStates = await Promise.all(
-          optionsTabControllers.map(async ([tabId, controller]) => {
-            const tabState = await controller.getTabState();
-            return tabState?.isOptionsPage === true ? tabId : null;
-          })
-        );
-        const optionsTabIds = optionsTabStates.filter(
-          (id) => id !== null
-        ) as Array<number>;
+        const optionsTabIds: Array<number> = [];
+        for (const [tabId, controller] of this.tabState) {
+          const tabState = await controller.getTabState();
+          if (tabState?.isOptionsPage === true) {
+            optionsTabIds.push(tabId);
+          }
+        }
         let isActive = false;
         for (const tabId of optionsTabIds) {
           try {
