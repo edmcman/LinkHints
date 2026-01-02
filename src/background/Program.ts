@@ -117,23 +117,17 @@ export const tMeta = tweakable("Background", t);
 class TabController {
   private tabId: number;
 
-  private cachedTabState: TabState | undefined;
-
   constructor(tabId: number) {
     this.tabId = tabId;
   }
 
   async getTabState(): Promise<TabState | undefined> {
-    if (this.cachedTabState !== undefined) {
-      return this.cachedTabState;
-    }
     try {
       const response = (await browser.tabs.sendMessage(this.tabId, {
         type: "ToRenderer",
         message: { type: "GetTabState" },
       } as const)) as FromRenderer;
       if (response.type === "TabStateResponse") {
-        this.cachedTabState = response.tabState;
         return response.tabState;
       }
     } catch (error) {
@@ -143,7 +137,6 @@ class TabController {
   }
 
   async setTabState(tabState: TabState): Promise<void> {
-    this.cachedTabState = tabState;
     try {
       await browser.tabs.sendMessage(this.tabId, {
         type: "ToRenderer",
@@ -160,7 +153,6 @@ class TabController {
   }
 
   async deleteTabState(): Promise<boolean> {
-    this.cachedTabState = undefined;
     try {
       await browser.tabs.sendMessage(this.tabId, {
         type: "ToRenderer",
@@ -170,10 +162,6 @@ class TabController {
       log("error", "TabController#deleteTabState", error);
     }
     return true;
-  }
-
-  invalidateCache(): void {
-    this.cachedTabState = undefined;
   }
 }
 
