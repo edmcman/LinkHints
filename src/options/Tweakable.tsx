@@ -59,10 +59,7 @@ export default function Tweakable({
     () =>
       addListener(
         browser.storage.onChanged,
-        (
-          changes: { [key: string]: { oldValue: unknown; newValue: unknown } },
-          areaName: string
-        ) => {
+        (changes, areaName) => {
           if (areaName === "sync") {
             const didUpdate = Object.keys(changes).some((key) =>
               ALL_KEYS.has(key)

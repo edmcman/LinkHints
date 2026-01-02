@@ -257,10 +257,7 @@ export function tweakable(
 
   const unlisten = addListener(
     browser.storage.onChanged,
-    (
-      changes: { [key: string]: { oldValue: unknown; newValue: unknown } },
-      areaName: string
-    ) => {
+    (changes, areaName) => {
       if (areaName === "sync") {
         const data = Object.fromEntries(
           Object.keys(changes).flatMap((fullKey) => {
