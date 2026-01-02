@@ -221,7 +221,8 @@ export default class RendererProgram {
     );
   }
 
-  onMessage(wrappedMessage: FromBackground): FromRenderer | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onMessage(wrappedMessage: FromBackground): any {
     // As mentioned in `this.start`, re-send the "RendererScriptAdded" message
     // in Firefox as a workaround for its content script loading quirks.
     if (wrappedMessage.type === "FirefoxWorkaround") {

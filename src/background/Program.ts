@@ -129,7 +129,8 @@ class TabController {
     }
     try {
       const response = (await browser.tabs.sendMessage(this.tabId, {
-        type: "GetTabState",
+        type: "ToRenderer",
+        message: { type: "GetTabState" },
       } as const)) as FromRenderer;
       if (response.type === "TabStateResponse") {
         this.cachedTabState = response.tabState;
@@ -145,8 +146,8 @@ class TabController {
     this.cachedTabState = tabState;
     try {
       await browser.tabs.sendMessage(this.tabId, {
-        type: "SetTabState",
-        tabState,
+        type: "ToRenderer",
+        message: { type: "SetTabState", tabState },
       } as const);
     } catch (error) {
       log("error", "TabController#setTabState", error);
@@ -162,7 +163,8 @@ class TabController {
     this.cachedTabState = undefined;
     try {
       await browser.tabs.sendMessage(this.tabId, {
-        type: "DeleteTabState",
+        type: "ToRenderer",
+        message: { type: "DeleteTabState" },
       } as const);
     } catch (error) {
       log("error", "TabController#deleteTabState", error);
