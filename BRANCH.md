@@ -6,3 +6,9 @@ Ideas:
 - Only allow access of tab state in a callback, and any changes are sent back after callback
 
 Also see the extension debug logs.
+
+# Ugh
+
+This technique is unlikely to work:
+- BackgroundProgram's onMessage became async, despite a comment warning against this.
+- Structured copy of getTabState removes methods in, e.g., TimeTracker.

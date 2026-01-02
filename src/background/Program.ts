@@ -967,6 +967,12 @@ export default class BackgroundProgram {
         type: "Idle",
         highlighted: hintsState.highlighted,
       };
+      // Persist the updated tab state to the renderer so it stays authoritative
+      fireAndForget(
+        this.getController(tabId).setTabState(tabState),
+        "BackgroundProgram#handleHintInput->setTabState",
+        tabId
+      );
       this.setTimeout(tabId, t.MATCH_HIGHLIGHT_DURATION.value);
       fireAndForget(
         this.updateWorkerStateAfterHintActivation({
@@ -1963,6 +1969,14 @@ export default class BackgroundProgram {
       highlighted: tabState.hintsState.highlighted,
     };
 
+    // Persist the updated tab state to the renderer before starting to collect
+    // elements so the renderer has up-to-date authoritative state.
+    fireAndForget(
+      this.getController(tabId).setTabState(tabState),
+      "BackgroundProgram#enterHintsMode->setTabState",
+      tabId
+    );
+
     fireAndForget(
       this.updateBadge(tabId),
       "BackgroundProgram#exitHintsMode->updateBadge"
@@ -1996,6 +2010,14 @@ export default class BackgroundProgram {
       type: "Idle",
       highlighted: tabState.hintsState.highlighted,
     };
+
+    // Persist the idle state to the renderer so its authoritative state stays
+    // in sync with the background.
+    fireAndForget(
+      this.getController(tabId).setTabState(tabState),
+      "BackgroundProgram#exitHintsMode->setTabState",
+      tabId
+    );
 
     if (sendMessages) {
       this.sendWorkerMessage(this.makeWorkerState(tabState), {
