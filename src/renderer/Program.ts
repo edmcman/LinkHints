@@ -221,16 +221,16 @@ export default class RendererProgram {
     );
   }
 
-  onMessage(wrappedMessage: FromBackground): void {
+  onMessage(wrappedMessage: FromBackground): FromRenderer | undefined {
     // As mentioned in `this.start`, re-send the "RendererScriptAdded" message
     // in Firefox as a workaround for its content script loading quirks.
     if (wrappedMessage.type === "FirefoxWorkaround") {
       this.sendMessage({ type: "RendererScriptAdded" });
-      return;
+      return undefined;
     }
 
     if (wrappedMessage.type !== "ToRenderer") {
-      return;
+      return undefined;
     }
 
     const { message } = wrappedMessage;
@@ -291,27 +291,26 @@ export default class RendererProgram {
         break;
 
       case "GetTabState":
-        this.sendMessage({
+        return {
           type: "TabStateResponse",
           tabState: this.tabState,
-        });
-        break;
+        };
 
       case "SetTabState":
         this.tabState = message.tabState;
         break;
 
       case "HasTabState":
-        this.sendMessage({
+        return {
           type: "TabStateResponse",
           tabState: this.tabState,
-        });
-        break;
+        };
 
       case "DeleteTabState":
         this.tabState = undefined;
         break;
     }
+    return undefined;
   }
 
   onIntersection(entries: Array<IntersectionObserverEntry>): void {
