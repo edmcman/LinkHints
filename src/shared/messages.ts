@@ -169,25 +169,11 @@ export type FromRenderer =
     }
   | {
       type: "RendererScriptAdded";
-    }
-  | {
-      type: "TabStateResponse";
-      tabState: TabState | undefined;
-    }
-  | {
-      type: "TabStateUpdated";
-      tabState: TabState;
     };
 
 export type ToRenderer =
   | {
-      type: "DeleteTabState";
-    }
-  | {
       type: "GetTabState";
-    }
-  | {
-      type: "HasTabState";
     }
   | {
       type: "Peek";

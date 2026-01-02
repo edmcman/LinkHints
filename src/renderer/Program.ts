@@ -300,16 +300,6 @@ export default class RendererProgram {
       case "SetTabState":
         this.tabState = message.tabState;
         break;
-
-      case "HasTabState":
-        return {
-          type: "TabStateResponse",
-          tabState: this.tabState,
-        };
-
-      case "DeleteTabState":
-        this.tabState = undefined;
-        break;
     }
     return undefined;
   }

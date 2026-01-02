@@ -146,23 +146,6 @@ class TabController {
       log("error", "TabController#setTabState", error);
     }
   }
-
-  async hasTabState(): Promise<boolean> {
-    const tabState = await this.getTabState();
-    return tabState !== undefined;
-  }
-
-  async deleteTabState(): Promise<boolean> {
-    try {
-      await browser.tabs.sendMessage(this.tabId, {
-        type: "ToRenderer",
-        message: { type: "DeleteTabState" },
-      } as const);
-    } catch (error) {
-      log("error", "TabController#deleteTabState", error);
-    }
-    return true;
-  }
 }
 
 export default class BackgroundProgram {
