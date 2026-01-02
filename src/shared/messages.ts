@@ -160,6 +160,13 @@ export type ToWorker =
       type: "UpdateElements";
     };
 
+export type GetTabStateResponse = {
+  type: "GetTabStateResponse";
+  tabState: TabState;
+};
+
+export type RendererResponse = GetTabStateResponse | undefined;
+
 export type FromRenderer =
   | {
       type: "Rendered";

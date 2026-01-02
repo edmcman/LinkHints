@@ -116,25 +116,30 @@ export function addEventListener<
 }
 
 export function addListener<
-  Listener extends (...args: Array<never>) => void,
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  Listener extends Function,
   Options
 >(
   target: {
-    addListener: (listener: Listener, options?: Options) => void;
-    removeListener: (listener: Listener) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    addListener: (listener: any, options?: Options) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    removeListener: (listener: any) => void;
   },
   listener: Listener,
   name: string,
   options?: Options
 ): () => void {
-  // @ts-expect-error This is fine. I have no idea how to fix.
-  const wrappedListener: Listener = (...args) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/array-type, @typescript-eslint/no-unsafe-assignment
+  const wrappedListener = ((...args: any[]) => {
     try {
-      listener(...args);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+      return (listener as any)(...args);
     } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       log("error", name, error, ...args);
     }
-  };
+  }) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   if (options === undefined) {
     target.addListener(wrappedListener);
   } else {

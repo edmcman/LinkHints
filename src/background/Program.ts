@@ -38,6 +38,7 @@ import type {
   FromPopup,
   FromRenderer,
   FromWorker,
+  GetTabStateResponse,
   ToBackground,
   ToOptions,
   ToPopup,
@@ -126,10 +127,8 @@ class TabController {
       const response = (await browser.tabs.sendMessage(this.tabId, {
         type: "ToRenderer",
         message: { type: "GetTabState" },
-      } as const)) as FromRenderer;
-      if (response.type === "TabStateResponse") {
-        return response.tabState;
-      }
+      } as const)) as GetTabStateResponse;
+      return response.tabState;
     } catch (error) {
       log("error", "TabController#getTabState", error);
     }
@@ -1661,7 +1660,7 @@ export default class BackgroundProgram {
       }
 
       default:
-        log("error", "Unexpected FromRenderer message type", message.type);
+        log("error", "Unexpected FromRenderer message", message);
         break;
     }
   }

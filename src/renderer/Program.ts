@@ -35,6 +35,7 @@ import {
 import type {
   FromBackground,
   FromRenderer,
+  RendererResponse,
   ToBackground,
 } from "../shared/messages";
 import { TimeTracker } from "../shared/perf";
@@ -87,9 +88,19 @@ export default class RendererProgram {
     parsed: undefined,
   };
 
-  tabState: TabState | undefined;
+  tabState: TabState;
 
   constructor() {
+    this.tabState = {
+      hintsState: {
+        type: "Idle",
+        highlighted: [],
+      },
+      keyboardMode: { type: "FromHintsState" },
+      perf: [],
+      isOptionsPage: false,
+      isPinned: false,
+    };
     this.shruggieElement = createHintElement(SHRUGGIE);
     this.shruggieElement.classList.add(SHRUGGIE_CLASS);
     setStyles(this.shruggieElement, {
@@ -221,8 +232,7 @@ export default class RendererProgram {
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onMessage(wrappedMessage: FromBackground): any {
+  onMessage(wrappedMessage: FromBackground): RendererResponse {
     // As mentioned in `this.start`, re-send the "RendererScriptAdded" message
     // in Firefox as a workaround for its content script loading quirks.
     if (wrappedMessage.type === "FirefoxWorkaround") {
@@ -293,7 +303,7 @@ export default class RendererProgram {
 
       case "GetTabState":
         return {
-          type: "TabStateResponse",
+          type: "GetTabStateResponse",
           tabState: this.tabState,
         };
 
