@@ -62,6 +62,10 @@ import {
   TabsPerf,
   TimeTracker,
 } from "../shared/perf";
+import {
+  type SerializedTabState,
+  SerializedTabStateDecoder,
+} from "../shared/state";
 import { bool, tweakable, unsignedInt } from "../shared/tweakable";
 
 type MessageInfo = {
@@ -186,6 +190,10 @@ export default class BackgroundProgram {
 
   tabState = new Map<number, TabState>();
 
+  tabLocks = new Map<number, Promise<void>>();
+
+  loadedTabs = new Set<number>();
+
   restoredTabsPerf: TabsPerf = {};
 
   oneTimeWindowMessageToken: string = makeRandomToken();
@@ -202,6 +210,61 @@ export default class BackgroundProgram {
       errors: [],
       mac,
     };
+  }
+
+  private async loadTabState(tabId: number): Promise<TabState> {
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+    const key = `tabState_${tabId}`;
+    try {
+      const result = await browser.storage.local.get(key);
+      if (key in result) {
+        const storedValue = result[key] as string;
+        const parsed = JSON.parse(storedValue);
+        const decoded = decode(
+          SerializedTabStateDecoder,
+          parsed
+        ) as SerializedTabState;
+        // Reconstruct TimeTracker
+        const reconstructed: TabState = {
+          ...decoded,
+          hintsState:
+            decoded.hintsState.type !== "Idle"
+              ? {
+                  ...decoded.hintsState,
+                  time: TimeTracker.fromJSON(decoded.hintsState.time),
+                }
+              : decoded.hintsState,
+        };
+        return reconstructed;
+      }
+    } catch (error) {
+      log("warn", "Failed to load tab state", tabId, error);
+    }
+    return makeEmptyTabState(tabId);
+    /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
+  }
+
+  private async saveTabState(tabId: number): Promise<void> {
+    const tabState = this.tabState.get(tabId);
+    if (tabState !== undefined) {
+      const key = `tabState_${tabId}`;
+      try {
+        const hintsStateSerialized =
+          tabState.hintsState.type !== "Idle"
+            ? {
+                ...tabState.hintsState,
+                time: tabState.hintsState.time.toJSON(),
+              }
+            : tabState.hintsState;
+        const serialized: SerializedTabState = {
+          ...tabState,
+          hintsState: hintsStateSerialized,
+        };
+        await browser.storage.local.set({ [key]: JSON.stringify(serialized) });
+      } catch (error) {
+        log("error", "Failed to save tab state", tabId, error);
+      }
+    }
   }
 
   async start(): Promise<void> {
@@ -223,6 +286,7 @@ export default class BackgroundProgram {
     this.resets.add(
       addListener(
         browser.runtime.onMessage,
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         this.onMessage.bind(this),
         "BackgroundProgram#onMessage"
       ),
@@ -361,52 +425,57 @@ export default class BackgroundProgram {
       : browser.tabs.sendMessage(tabId, message, { frameId }));
   }
 
-  // Warning: Don’t make this method async! If a new tab gets for example 3
-  // events in a short time just after being opened, those three events might
-  // overwrite each other. Expected execution:
-  //
-  // 1. Process event1.
-  // 2. Process event2.
-  // 3. Process event3.
-  //
-  // Async execution (for very close events):
-  //
-  // 1. Start processing event1 until the first `await`.
-  // 2. Start processing event2 until the first `await`.
-  // 3. Start processing event3 until the first `await`.
-  // 4. Finish processing event1 (assuming no more `await`s).
-  // 5. Finish processing event2 (assuming no more `await`s).
-  // 6. Finish processing event3 (assuming no more `await`s).
-  //
-  // In the async case, all of the events might try to do `this.tabState.set()`.
-  //
-  // This happens when opening the Options page: WorkerScriptAdded,
-  // OptionsScriptAdded and RendererScriptAdded are all triggered very close to
-  // each other. An overwrite can cause us to lose `tabState.isOptionsPage`,
-  // breaking shortcuts customization.
-  onMessage(
+  // This method uses per-tab locks to ensure complete serialization of message
+  // handling (load, process, save) for each tab, preventing any concurrent access
+  // to TabState. Messages for different tabs can process concurrently.
+  async onMessage(
     message: ToBackground,
     sender: browser.runtime.MessageSender
-  ): void {
+  ): Promise<void> {
     // `info` can be missing when the message comes from for example the popup
     // (which isn’t associated with a tab). The worker script can even load in
     // an `about:blank` frame somewhere when hovering the browserAction!
     const info = makeMessageInfo(sender);
 
-    const tabStateRaw =
-      info === undefined ? undefined : this.tabState.get(info.tabId);
-    const tabState =
-      tabStateRaw === undefined ? makeEmptyTabState(info?.tabId) : tabStateRaw;
-
-    if (info !== undefined && tabStateRaw === undefined) {
-      const { [info.tabId.toString()]: perf = [] } = this.restoredTabsPerf;
-      tabState.perf = perf;
-      this.tabState.set(info.tabId, tabState);
+    if (info === undefined) {
+      // Handle messages without tab
+      switch (message.type) {
+        case "FromPopup":
+          fireAndForget(
+            this.onPopupMessage(message.message),
+            "BackgroundProgram#onPopupMessage",
+            message.message,
+            info
+          );
+          break;
+        default:
+          // Should not happen for messages without tab
+          break;
+      }
+      return;
     }
 
-    switch (message.type) {
-      case "FromWorker":
-        if (info !== undefined) {
+    // For messages with tab
+    const lock = this.tabLocks.get(info.tabId) ?? Promise.resolve();
+    const newLock = lock.then(async () => {
+      if (!this.loadedTabs.has(info.tabId)) {
+        const stored = await this.loadTabState(info.tabId);
+        this.tabState.set(info.tabId, stored);
+        this.loadedTabs.add(info.tabId);
+        // Set perf if available
+        const { [info.tabId.toString()]: perf = [] } = this.restoredTabsPerf;
+        stored.perf = perf;
+      }
+
+      const tabState = this.tabState.get(info.tabId);
+
+      if (tabState === undefined) {
+        log("error", "Tab state not found after loading", info.tabId);
+        return;
+      }
+
+      switch (message.type) {
+        case "FromWorker":
           try {
             this.onWorkerMessage(message.message, info, tabState);
           } catch (error) {
@@ -418,11 +487,9 @@ export default class BackgroundProgram {
               info
             );
           }
-        }
-        break;
+          break;
 
-      case "FromRenderer":
-        if (info !== undefined) {
+        case "FromRenderer":
           try {
             this.onRendererMessage(message.message, info, tabState);
           } catch (error) {
@@ -434,29 +501,29 @@ export default class BackgroundProgram {
               info
             );
           }
-        }
-        break;
+          break;
 
-      case "FromPopup":
-        fireAndForget(
-          this.onPopupMessage(message.message),
-          "BackgroundProgram#onPopupMessage",
-          message.message,
-          info
-        );
-        break;
+        case "FromOptions":
+          try {
+            await this.onOptionsMessage(message.message, info, tabState);
+          } catch (error) {
+            log(
+              "error",
+              "BackgroundProgram#onOptionsMessage",
+              error,
+              message.message,
+              info
+            );
+          }
+          break;
+        default:
+          throw new Error(`Unexpected message type: ${message.type}`);
+      }
 
-      case "FromOptions":
-        if (info !== undefined) {
-          fireAndForget(
-            this.onOptionsMessage(message.message, info, tabState),
-            "BackgroundProgram#onOptionsMessage",
-            message.message,
-            info
-          );
-        }
-        break;
-    }
+      await this.saveTabState(info.tabId);
+    });
+    this.tabLocks.set(info.tabId, newLock);
+    await newLock;
   }
 
   onConnect(port: browser.runtime.Port): void {
@@ -2000,6 +2067,8 @@ export default class BackgroundProgram {
     }
 
     this.tabState.delete(tabId);
+    this.tabLocks.delete(tabId);
+    this.loadedTabs.delete(tabId);
 
     if (!tabState.isOptionsPage) {
       this.sendOptionsMessage({

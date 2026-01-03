@@ -1,4 +1,13 @@
-import { array, multi, stringUnion } from "tiny-decoders";
+import {
+  array,
+  boolean,
+  fieldsAuto,
+  multi,
+  number,
+  optional,
+  string,
+  stringUnion,
+} from "tiny-decoders";
 
 export type ElementType = ReturnType<typeof ElementType>;
 export const ElementType = stringUnion({
@@ -25,10 +34,26 @@ export type Point = {
   debug: string;
 };
 
+export const PointDecoder = fieldsAuto({
+  x: number,
+  y: number,
+  align: stringUnion({ left: null, right: null }),
+  debug: string,
+});
+
 export type HintMeasurements = Point & {
   maxX: number;
   weight: number;
 };
+
+export const HintMeasurementsDecoder = fieldsAuto({
+  x: number,
+  y: number,
+  align: stringUnion({ left: null, right: null }),
+  debug: string,
+  maxX: number,
+  weight: number,
+});
 
 export type VisibleElement = {
   element: HTMLElement;
@@ -50,6 +75,19 @@ export type ElementReport = {
   hasClickListener: boolean;
 };
 
+export const ElementReportDecoder = fieldsAuto({
+  type: ElementType,
+  index: number,
+  hintMeasurements: HintMeasurementsDecoder,
+  url: optional(string),
+  urlWithTarget: optional(string),
+  text: string,
+  textContent: boolean,
+  textWeight: number,
+  isTextInput: boolean,
+  hasClickListener: boolean,
+});
+
 export type ExtendedElementReport = ElementReport & {
   frame: {
     id: number;
@@ -58,10 +96,48 @@ export type ExtendedElementReport = ElementReport & {
   hidden: boolean;
 };
 
+export const ExtendedElementReportDecoder = fieldsAuto({
+  type: ElementType,
+  index: number,
+  hintMeasurements: HintMeasurementsDecoder,
+  url: optional(string),
+  urlWithTarget: optional(string),
+  text: string,
+  textContent: boolean,
+  textWeight: number,
+  isTextInput: boolean,
+  hasClickListener: boolean,
+  frame: fieldsAuto({
+    id: number,
+    index: number,
+  }),
+  hidden: boolean,
+});
+
 export type ElementWithHint = ExtendedElementReport & {
   weight: number;
   hint: string;
 };
+
+export const ElementWithHintDecoder = fieldsAuto({
+  type: ElementType,
+  index: number,
+  hintMeasurements: HintMeasurementsDecoder,
+  url: optional(string),
+  urlWithTarget: optional(string),
+  text: string,
+  textContent: boolean,
+  textWeight: number,
+  isTextInput: boolean,
+  hasClickListener: boolean,
+  frame: fieldsAuto({
+    id: number,
+    index: number,
+  }),
+  hidden: boolean,
+  weight: number,
+  hint: string,
+});
 
 export function elementKey(element: ElementWithHint): string {
   const { x, y, align } = element.hintMeasurements;

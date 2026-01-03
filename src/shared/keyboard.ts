@@ -3,6 +3,8 @@ import {
   chain,
   DecoderError,
   fieldsAuto,
+  fieldsUnion,
+  number,
   string,
   stringUnion,
   tuple,
@@ -315,3 +317,11 @@ const MODIFIER_KEYS = new Set<string>([
 export function isModifierKey(key: string): boolean {
   return MODIFIER_KEYS.has(key);
 }
+
+export const KeyboardModeBackgroundDecoder = fieldsUnion("type", {
+  Capture: fieldsAuto({}),
+  FromHintsState: fieldsAuto({}),
+  PreventOverTyping: fieldsAuto({
+    sinceTimestamp: number,
+  }),
+});

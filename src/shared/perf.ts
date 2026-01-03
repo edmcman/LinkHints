@@ -2,6 +2,7 @@ import {
   array,
   fieldsAuto,
   number,
+  optional,
   record,
   string,
   tuple,
@@ -34,6 +35,11 @@ export const Perf = array(
 
 export type TabsPerf = ReturnType<typeof TabsPerf>;
 export const TabsPerf = record(Perf);
+
+export type TimeTrackerJSON = {
+  _durations: Durations;
+  _current: { label: string; timestamp: number } | undefined;
+};
 
 export class TimeTracker {
   _durations: Durations = [];
@@ -71,4 +77,28 @@ export class TimeTracker {
     this.stop();
     return this._durations.slice();
   }
+
+  toJSON(): TimeTrackerJSON {
+    return {
+      _durations: this._durations,
+      _current: this._current,
+    };
+  }
+
+  static fromJSON(obj: TimeTrackerJSON): TimeTracker {
+    const tracker = new TimeTracker();
+    tracker._durations = obj._durations;
+    tracker._current = obj._current;
+    return tracker;
+  }
 }
+
+export const TimeTrackerDecoder = fieldsAuto({
+  _durations: Durations,
+  _current: optional(
+    fieldsAuto({
+      label: string,
+      timestamp: number,
+    })
+  ),
+});
