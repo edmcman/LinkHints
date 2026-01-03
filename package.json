@@ -14,7 +14,8 @@
     "png-icons": "sucrase-node scripts/png-icons.ts",
     "web-ext": "sucrase-node node_modules/.bin/web-ext",
     "test:playwright": "npm run compile && playwright test --project=firefox",
-    "test": "run-pty --auto-exit % npm run build:all % eslint . --report-unused-disable-directives % prettier --check . % tsc"
+    "test": "npm run build:all && eslint . --report-unused-disable-directives && prettier --check . && tsc",
+    "test-manual": "run-pty --auto-exit % npm run build:all % eslint . --report-unused-disable-directives % prettier --check . % tsc"
   },
   "dependencies": {
     "n-ary-huffman": "4.0.0",
