@@ -298,7 +298,7 @@ export default class BackgroundProgram {
     }
 
     fireAndForget(
-      browser.browserAction.setBadgeBackgroundColor({ color: COLOR_BADGE }),
+      getActionApi().setBadgeBackgroundColor({ color: COLOR_BADGE }),
       "BackgroundProgram#start->setBadgeBackgroundColor"
     );
 
@@ -2087,7 +2087,7 @@ export default class BackgroundProgram {
     const type: IconType = enabled ? "normal" : "disabled";
     const icons = getIcons(type);
     log("log", "BackgroundProgram#updateIcon", tabId, type);
-    await browser.browserAction.setIcon({ path: icons, tabId });
+    await getActionApi().setIcon({ path: icons, tabId });
   }
 
   updateBadge(tabId: number): void {
@@ -2099,7 +2099,7 @@ export default class BackgroundProgram {
     const { hintsState } = tabState;
 
     fireAndForget(
-      browser.browserAction.setBadgeText({
+      getActionApi().setBadgeText({
         text: getBadgeText(hintsState),
         tabId,
       }),
@@ -2607,25 +2607,52 @@ type IconType = "disabled" | "normal";
 
 function getIcons(type: IconType): Record<string, string> {
   const manifest = browser.runtime.getManifest();
+  const iconEntries =
+    manifest.action?.default_icon ??
+    manifest.browser_action?.default_icon ??
+    {};
   return Object.fromEntries(
-    Object.entries(manifest.browser_action?.default_icon ?? {}).flatMap(
-      ([key, value]) => {
-        if (typeof value === "string") {
-          const newValue = value.replace(/(\$)\w+/, `$1${type}`);
-          // Default icons are always PNG in development to support Chrome. Switch
-          // to SVG in Firefox during development to make it easier to work on the
-          // SVG icon source (automatic reloading). This also requires a
-          // cache-bust.
-          const finalValue =
-            !PROD && BROWSER === "firefox"
-              ? `${newValue.replace(/png/g, "svg")}?${iconsChecksum}`
-              : newValue;
-          return [[key, finalValue]];
-        }
-        return [];
+    Object.entries(iconEntries).flatMap(([key, value]) => {
+      if (typeof value === "string") {
+        const newValue = value.replace(/(\$)\w+/, `$1${type}`);
+        // Default icons are always PNG in development to support Chrome. Switch
+        // to SVG in Firefox during development to make it easier to work on the
+        // SVG icon source (automatic reloading). This also requires a
+        // cache-bust.
+        const finalValue =
+          !PROD && BROWSER === "firefox"
+            ? `${newValue.replace(/png/g, "svg")}?${iconsChecksum}`
+            : newValue;
+        return [[key, finalValue]];
       }
-    )
+      return [];
+    })
   );
+}
+
+type ActionApi = {
+  setBadgeBackgroundColor: (details: { color: string }) => Promise<void>;
+  setIcon: (details: {
+    path: Record<string, string>;
+    tabId?: number;
+  }) => Promise<void>;
+  setBadgeText: (details: { text: string; tabId?: number }) => Promise<void>;
+  setTitle: (details: { title: string; tabId?: number }) => Promise<void>;
+};
+
+function getActionApi(): ActionApi {
+  // Narrow the browser type to avoid `any` and unsafe member access rules.
+  const b = browser as unknown as {
+    action?: ActionApi;
+    browserAction?: ActionApi;
+  };
+  const api = b.action ?? b.browserAction;
+  if (api === undefined) {
+    throw new Error(
+      "Missing extension action API: expected browser.action or browser.browserAction to be present"
+    );
+  }
+  return api;
 }
 
 // Left to right, top to bottom.
