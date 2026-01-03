@@ -2496,6 +2496,14 @@ function shouldCombineHintsForClick(element: ElementWithHint): boolean {
 async function runContentScripts(
   tabs: Array<browser.tabs.Tab>
 ): Promise<Array<Array<unknown>>> {
+  log(
+    "error",
+    "runContentScripts",
+    "MV3 UNIMPLEMENTED: Running content scripts in tabs",
+    tabs
+  );
+  return [[]];
+
   const manifest = browser.runtime.getManifest();
 
   const detailsList =
