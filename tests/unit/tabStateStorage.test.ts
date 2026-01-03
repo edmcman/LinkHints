@@ -1,13 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-import {
+// Define build-time globals for the test environment
+// This happens because this test imports directly from the source code, which is kind of a hack.
+;(globalThis as any).META_SLUG = "link_hints";
+;(globalThis as any).PROD = false;
+;(globalThis as any).DEFAULT_LOG_LEVEL_CONFIG = "log";
+
+// Require the module after setting globals so top-level evaluation sees them
+const {
   deserializeTabState,
   removeTabState,
   restoreAllTabStates,
   saveTabState,
-  SerializedTabState,
   serializeTabState,
-} from "../../src/background/tabStateStorage";
+} = require("../../src/background/tabStateStorage");
+
+// Type-only import for TS types
+import type { SerializedTabState } from "../../src/background/tabStateStorage";
 
 type BrowserMock = {
   storage: {
