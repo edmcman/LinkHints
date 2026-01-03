@@ -63,6 +63,13 @@ import {
   TimeTracker,
 } from "../shared/perf";
 import { bool, tweakable, unsignedInt } from "../shared/tweakable";
+import {
+  deserializeTabState,
+  removeTabState,
+  restoreAllTabStates,
+  saveTabState,
+  serializeTabState,
+} from "./tabStateStorage";
 
 type MessageInfo = {
   tabId: number;
@@ -219,6 +226,43 @@ export default class BackgroundProgram {
     }
 
     const tabs = await browser.tabs.query({});
+
+    // Restore all stored tab states eagerly for currently open tabs. Remove
+    // stale entries for tabs that are no longer open.
+    try {
+      const saved = await restoreAllTabStates();
+      const openTabIds = new Set<number>(
+        tabs
+          .map((tab) => tab.id)
+          .filter((id) => id !== undefined) as Array<number>
+      );
+      for (const [tabIdStr, serial] of Object.entries(saved)) {
+        const tabIdNum = Number(tabIdStr);
+        if (!openTabIds.has(tabIdNum)) {
+          // Clean up stale entry.
+          fireAndForget(
+            removeTabState(tabIdNum),
+            "BackgroundProgram#start->removeStaleTabState",
+            tabIdNum
+          );
+          continue;
+        }
+
+        // Only hydrate if we don't already have a tab state for this tab.
+        if (!this.tabState.has(tabIdNum)) {
+          const tabState = makeEmptyTabState(tabIdNum);
+          Object.assign(tabState, deserializeTabState(serial));
+          // Do NOT restore DOM-dependent hints state. Reset to Idle.
+          tabState.hintsState = {
+            type: "Idle",
+            highlighted: tabState.hintsState.highlighted,
+          };
+          this.tabState.set(tabIdNum, tabState);
+        }
+      }
+    } catch (error) {
+      log("error", "BackgroundProgram#start->restoreAllTabStates", error);
+    }
 
     this.resets.add(
       addListener(
@@ -456,6 +500,21 @@ export default class BackgroundProgram {
           );
         }
         break;
+    }
+
+    // Persist the tab state after handling the message. Keep this synchronous
+    // from the caller's perspective by not awaiting the promise.
+    if (info !== undefined) {
+      const { tabId } = info;
+      const ts = this.tabState.get(tabId);
+      if (ts !== undefined) {
+        const serial = serializeTabState(tabId, ts);
+        fireAndForget(
+          saveTabState(tabId, serial),
+          "BackgroundProgram#onMessage->saveTabState",
+          tabId
+        );
+      }
     }
   }
 
@@ -2009,6 +2068,13 @@ export default class BackgroundProgram {
     }
 
     this.updateOptionsPageData();
+
+    // Remove stored representation for this tab
+    fireAndForget(
+      removeTabState(tabId),
+      "BackgroundProgram#deleteTabState->removeTabState",
+      tabId
+    );
   }
 
   async updateIcon(tabId: number): Promise<void> {
