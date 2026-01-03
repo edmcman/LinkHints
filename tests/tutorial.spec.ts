@@ -98,12 +98,6 @@ test("Run through tutorial", async ({
     // Capture console logs from the page (including content scripts)
     page.on("console", (msg) => logs.push(msg.text()));
 
-    // Capture console logs from the background page
-    const backgroundPages = context.backgroundPages();
-    if (backgroundPages.length > 0) {
-      backgroundPages[0].on("console", (msg) => logs.push(msg.text()));
-    }
-
     await page.goto(tutorialUrl);
     await page.waitForLoadState("load");
 

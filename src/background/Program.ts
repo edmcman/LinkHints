@@ -227,37 +227,25 @@ export default class BackgroundProgram {
 
     const tabs = await browser.tabs.query({});
 
-    // Restore all stored tab states eagerly for currently open tabs. Remove
-    // stale entries for tabs that are no longer open.
+    // Restore stored tab states for currently open tabs.
     try {
       const saved = await restoreAllTabStates();
-      const openTabIds = new Set<number>(
-        tabs
-          .map((tab) => tab.id)
-          .filter((id) => id !== undefined) as Array<number>
-      );
+      const openTabIds = new Set<number>(tabs.map((tab) => tab.id as number));
       for (const [tabIdStr, serial] of Object.entries(saved)) {
         const tabIdNum = Number(tabIdStr);
-        if (!openTabIds.has(tabIdNum)) {
-          // Clean up stale entry.
+        if (openTabIds.has(tabIdNum)) {
+          // Hydrate a fresh TabState; do not restore DOM-dependent hints state.
+          const tabState = makeEmptyTabState(tabIdNum);
+          Object.assign(tabState, deserializeTabState(serial));
+          tabState.hintsState = { type: "Idle", highlighted: [] };
+          this.tabState.set(tabIdNum, tabState);
+        } else {
+          // Clean up stale entry from storage
           fireAndForget(
             removeTabState(tabIdNum),
             "BackgroundProgram#start->removeStaleTabState",
             tabIdNum
           );
-          continue;
-        }
-
-        // Only hydrate if we don't already have a tab state for this tab.
-        if (!this.tabState.has(tabIdNum)) {
-          const tabState = makeEmptyTabState(tabIdNum);
-          Object.assign(tabState, deserializeTabState(serial));
-          // Do NOT restore DOM-dependent hints state. Reset to Idle.
-          tabState.hintsState = {
-            type: "Idle",
-            highlighted: tabState.hintsState.highlighted,
-          };
-          this.tabState.set(tabIdNum, tabState);
         }
       }
     } catch (error) {

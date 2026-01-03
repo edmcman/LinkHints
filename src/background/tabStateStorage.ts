@@ -2,6 +2,7 @@ import type {
   KeyboardModeBackground,
   KeyboardModeWorker,
 } from "../shared/keyboard";
+import { log } from "../shared/main";
 import type { Perf } from "../shared/perf";
 
 // Minimal serializable tab state shape
@@ -10,7 +11,6 @@ export type SerializedTabState = {
   isOptionsPage?: boolean;
   isPinned?: boolean;
   keyboardMode?: KeyboardModeBackground | KeyboardModeWorker; // should already be a plain object
-  timeDurations?: Array<[string, number]>;
 };
 
 type MinimalTabState = {
@@ -35,18 +35,8 @@ export async function restoreAllTabStates(): Promise<
       return tabStates as Record<string, SerializedTabState>;
     }
   } catch (error) {
-    // Swallow — background should continue even if storage is inaccessible
-    // Use `log` to be consistent with repo logging
-    // Note: we import log lazily via a dynamic import to avoid cycles in some
-    // environments where background modules might load differently.
-    try {
-      const { log } = await import("../shared/main");
-      log("error", "restoreAllTabStates: failed to read storage", error);
-    } catch {
-      // Fallback
-      // eslint-disable-next-line no-console
-      console.error("restoreAllTabStates: failed to read storage", error);
-    }
+    // If reading fails, keep going without restored data.
+    log("error", "restoreAllTabStates: failed to read storage", error);
   }
   return {};
 }
@@ -68,20 +58,7 @@ export function serializeTabState(
 export function deserializeTabState(
   serial: SerializedTabState
 ): Partial<MinimalTabState> {
-  const partial: Partial<MinimalTabState> = {};
-  if (serial.perf !== undefined) {
-    partial.perf = serial.perf;
-  }
-  if (serial.isOptionsPage !== undefined) {
-    partial.isOptionsPage = serial.isOptionsPage;
-  }
-  if (serial.isPinned !== undefined) {
-    partial.isPinned = serial.isPinned;
-  }
-  if (serial.keyboardMode !== undefined) {
-    partial.keyboardMode = serial.keyboardMode;
-  }
-  return partial;
+  return serial;
 }
 
 export async function saveTabState(
@@ -102,13 +79,7 @@ export async function saveTabState(
         : { ...map, [String(tabId)]: serial };
     await browser.storage.local.set({ [key]: next });
   } catch (error) {
-    try {
-      const { log } = await import("../shared/main");
-      log("error", "saveTabState: failed to write storage", error);
-    } catch {
-      // eslint-disable-next-line no-console
-      console.error("saveTabState: failed to write storage", error);
-    }
+    log("error", "saveTabState: failed to write storage", error);
   }
 }
 
@@ -128,12 +99,6 @@ export async function removeTabState(tabId: number): Promise<void> {
     delete next[String(tabId)];
     await browser.storage.local.set({ [key]: next });
   } catch (error) {
-    try {
-      const { log } = await import("../shared/main");
-      log("error", "removeTabState: failed to modify storage", error);
-    } catch {
-      // eslint-disable-next-line no-console
-      console.error("removeTabState: failed to modify storage", error);
-    }
+    log("error", "removeTabState: failed to modify storage", error);
   }
 }
