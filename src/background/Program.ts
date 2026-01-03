@@ -2493,47 +2493,56 @@ function shouldCombineHintsForClick(element: ElementWithHint): boolean {
   return url !== undefined && !url.includes("#") && !hasClickListener;
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 async function runContentScripts(
   tabs: Array<browser.tabs.Tab>
 ): Promise<Array<Array<unknown>>> {
-  const manifest = browser.runtime.getManifest();
-
-  const detailsList =
-    manifest.content_scripts === undefined
-      ? []
-      : manifest.content_scripts
-          .filter((script) => script.matches.includes("<all_urls>"))
-          .flatMap((script) =>
-            script.js === undefined
-              ? []
-              : script.js.map((file) => ({
-                  file,
-                  allFrames: script.all_frames,
-                  matchAboutBlank: script.match_about_blank,
-                  runAt: script.run_at,
-                }))
-          );
-
-  return Promise.all(
-    tabs.flatMap((tab) =>
-      detailsList.map(async (details) => {
-        if (tab.id === undefined) {
-          return [];
-        }
-        try {
-          return (await browser.tabs.executeScript(
-            tab.id,
-            details
-          )) as Array<unknown>;
-        } catch {
-          // If `executeScript` fails it means that the extension is not
-          // allowed to run content scripts in the tab. Example: most
-          // `chrome://*` pages. We don’t need to do anything in that case.
-          return [];
-        }
-      })
-    )
+  log(
+    "error",
+    "runContentScripts",
+    "MV3 UNIMPLEMENTED: Running content scripts in tabs",
+    tabs
   );
+  return [[]];
+
+  // const manifest = browser.runtime.getManifest();
+
+  // const detailsList =
+  //   manifest.content_scripts === undefined
+  //     ? []
+  //     : manifest.content_scripts
+  //         .filter((script) => script.matches.includes("<all_urls>"))
+  //         .flatMap((script) =>
+  //           script.js === undefined
+  //             ? []
+  //             : script.js.map((file) => ({
+  //                 file,
+  //                 allFrames: script.all_frames,
+  //                 matchAboutBlank: script.match_about_blank,
+  //                 runAt: script.run_at,
+  //               }))
+  //         );
+
+  // return Promise.all(
+  //   tabs.flatMap((tab) =>
+  //     detailsList.map(async (details) => {
+  //       if (tab.id === undefined) {
+  //         return [];
+  //       }
+  //       try {
+  //         return (await browser.tabs.executeScript(
+  //           tab.id,
+  //           details
+  //         )) as Array<unknown>;
+  //       } catch {
+  //         // If `executeScript` fails it means that the extension is not
+  //         // allowed to run content scripts in the tab. Example: most
+  //         // `chrome://*` pages. We don’t need to do anything in that case.
+  //         return [];
+  //       }
+  //     })
+  //   )
+  // );
 }
 
 function firefoxWorkaround(tabs: Array<browser.tabs.Tab>): void {
