@@ -41,9 +41,7 @@ export function log(level: LogLevel, ...args: Array<unknown>): void {
     console,
     `[${META_SLUG}]`,
     formatDate(new Date()),
-    window.location.protocol.endsWith("-extension:")
-      ? "extension page"
-      : window.location.href,
+    getExecutionContext(),
     "\n ",
     ...args
   );
@@ -79,6 +77,35 @@ function getLogMethod(level: LogLevel): typeof console.log {
       return console.debug;
   }
 }
+
+/**
+ * Return a short string identifying the current execution context for logs.
+ * Prefers page URL if available; falls back to `service-worker` when no window.
+ */
+function getExecutionContext(): string {
+  try {
+    // MV2
+    if (
+      typeof window !== "undefined" &&
+      typeof window.location !== "undefined"
+    ) {
+      return window.location.protocol?.endsWith("-extension:")
+        ? "extension page"
+        : window.location.href;
+    }
+    // MV3
+    if (typeof globalThis !== "undefined") {
+      const gLoc = (globalThis as unknown as { location?: Location }).location;
+      if (gLoc !== undefined) {
+        return gLoc.href ?? "service-worker";
+      }
+    }
+  } catch {
+    // ignore errors accessing globals
+  }
+  return "service-worker";
+}
+
 /* eslint-enable no-console */
 
 export function addEventListener<
@@ -189,9 +216,27 @@ export function partition<T>(
   return [left, right];
 }
 
+/**
+ * Return the available crypto object preferring `window.crypto` then
+ * `globalThis.crypto`. Returns `undefined` when none are available.
+ */
+function getCrypto(): Crypto {
+  const c =
+    (typeof window !== "undefined"
+      ? (window as Window & { crypto?: Crypto }).crypto
+      : null) ??
+    (typeof globalThis !== "undefined"
+      ? (globalThis as typeof globalThis & { crypto?: Crypto }).crypto
+      : null);
+  if (c === null) {
+    throw new Error("crypto is not available in this environment");
+  }
+  return c;
+}
+
 export function makeRandomToken(): string {
   const array = new Uint32Array(3);
-  window.crypto.getRandomValues(array);
+  getCrypto().getRandomValues(array);
   return array.join("");
 }
 

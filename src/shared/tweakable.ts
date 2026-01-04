@@ -208,6 +208,27 @@ export function tweakable(
           case "SelectorString": {
             // eslint-disable-next-line @typescript-eslint/no-loop-func
             const decoded = chain(string, (val) => {
+              // Guard for non-DOM contexts (service workers / background pages
+              // without a document). If `document` is not available, log and
+              // throw so the background is alerted to an invalid context for
+              // selector validation.
+
+              // MV3: We currently don't have any SelectorString tweakables in
+              // service workers, so this shouldn't happen.
+              if (typeof document === "undefined") {
+                log(
+                  "error",
+                  "tweakable",
+                  "SelectorString validation requires a DOM (document is undefined)",
+                  { key, value: val }
+                );
+                // MV3: Should we fail here or just skip validation?
+                throw new Error(
+                  "Selector validation requires a DOM (document is undefined)"
+                );
+              }
+
+              // Validate selector syntax by attempting to query it.
               document.querySelector(val);
               return val;
             })(value);
