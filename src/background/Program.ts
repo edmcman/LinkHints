@@ -2,6 +2,11 @@ import huffman from "n-ary-huffman";
 
 import iconsChecksum from "../icons/checksum";
 import {
+  getActionApi,
+  getActionDefaultIcons,
+  getChromiumVariant,
+} from "../shared/apiCompatibility";
+import {
   elementKey,
   ElementRender,
   ElementReport,
@@ -33,7 +38,6 @@ import {
   splitEnteredText,
 } from "../shared/main";
 import type {
-  ChromiumVariant,
   FromBackground,
   FromOptions,
   FromPopup,
@@ -2378,15 +2382,6 @@ export default class BackgroundProgram {
   }
 }
 
-// Copied from: https://stackoverflow.com/a/77047611
-async function getChromiumVariant(): Promise<ChromiumVariant> {
-  const tabs = await browser.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
-  return tabs[0]?.vivExtData !== undefined ? "vivaldi" : "chrome";
-}
-
 function makeEmptyTabState(tabId: number | undefined): TabState {
   const tabState: TabState = {
     hintsState: {
@@ -2607,10 +2602,7 @@ type IconType = "disabled" | "normal";
 
 function getIcons(type: IconType): Record<string, string> {
   const manifest = browser.runtime.getManifest();
-  const iconEntries =
-    manifest.action?.default_icon ??
-    manifest.browser_action?.default_icon ??
-    {};
+  const iconEntries = getActionDefaultIcons(manifest);
   return Object.fromEntries(
     Object.entries(iconEntries).flatMap(([key, value]) => {
       if (typeof value === "string") {
@@ -2628,31 +2620,6 @@ function getIcons(type: IconType): Record<string, string> {
       return [];
     })
   );
-}
-
-type ActionApi = {
-  setBadgeBackgroundColor: (details: { color: string }) => Promise<void>;
-  setIcon: (details: {
-    path: Record<string, string>;
-    tabId?: number;
-  }) => Promise<void>;
-  setBadgeText: (details: { text: string; tabId?: number }) => Promise<void>;
-  setTitle: (details: { title: string; tabId?: number }) => Promise<void>;
-};
-
-function getActionApi(): ActionApi {
-  // Narrow the browser type to avoid `any` and unsafe member access rules.
-  const b = browser as unknown as {
-    action?: ActionApi;
-    browserAction?: ActionApi;
-  };
-  const api = b.action ?? b.browserAction;
-  if (api === undefined) {
-    throw new Error(
-      "Missing extension action API: expected browser.action or browser.browserAction to be present"
-    );
-  }
-  return api;
 }
 
 // Left to right, top to bottom.
