@@ -319,7 +319,7 @@ export default class BackgroundProgram {
     if (BROWSER === "firefox") {
       firefoxWorkaround(tabs);
     } else {
-      await runContentScripts(tabs);
+      await runContentScriptsInExistingTabs(tabs);
     }
   }
 
@@ -2494,7 +2494,7 @@ function shouldCombineHintsForClick(element: ElementWithHint): boolean {
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await
-async function runContentScripts(
+async function runContentScriptsInExistingTabs(
   tabs: Array<browser.tabs.Tab>
 ): Promise<Array<Array<unknown>>> {
   log(

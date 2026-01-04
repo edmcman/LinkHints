@@ -13,3 +13,7 @@
 - [ ] `window.program` not set to `BackgroundProgram` in MV3.
 - [ ] `SelectorString` will not work for `BackgroundProgram` tweakables. Currently there are none.
 - [ ] Many timers are used in `BackgroundProgram`, but for very short periods. It seems unlikely these will cause issues with the hint process.
+
+## Todo
+
+- [ ] `runContentScriptsInExistingTabs` is not yet implemented for MV3.
