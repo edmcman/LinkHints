@@ -5,7 +5,7 @@
 - [x] Remove DOM usage from background
 - [x] Replace timers with alarms: not going to
 - [ ] Update the manifest
-- [ ] Inject into pre-existing tabs. tabs.executeScript? Do we need this with MV3?
+- [x] Inject into pre-existing tabs. tabs.executeScript? Do we need this with MV3?
 - [ ] How are hints injected?
 
 ## Minor
@@ -16,4 +16,7 @@
 
 ## Todo
 
-- [ ] `runContentScriptsInExistingTabs` is not yet implemented for MV3.
+- [ ] Remove polyfill
+- [ ] Switch to chrome apis
+- [ ] Remove api compatibility shims
+- [x] `runContentScriptsInExistingTabs` is not yet implemented for MV3.
