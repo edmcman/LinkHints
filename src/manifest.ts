@@ -6,7 +6,7 @@ type IconSizes = Record<string, string>;
 
 export default (): string =>
   toJSON({
-    manifest_version: 2,
+    manifest_version: 3,
     version: config.meta.version,
     name: config.meta.name,
     author: config.meta.author,
@@ -15,15 +15,17 @@ export default (): string =>
     browser_specific_settings: getBrowserSpecificSettings(config.browser),
     icons: getIcons(config.icons, config.browser),
     permissions: [
-      // Needed for injecting content scripts in already open tabs on install,
-      // and for checking if tabs are allowed to run content scripts at all (so
-      // that the toolbar button can update).
-      "<all_urls>",
+      // Non-host permissions.
       // Needed to store options.
       "storage",
     ],
-    browser_action: {
-      browser_style: true,
+    host_permissions: [
+      // Host patterns moved to host_permissions for MV3.
+      "<all_urls>",
+    ],
+    action: {
+      // firefox supports it?
+      //browser_style: true,
       default_popup: config.popupHtml,
       default_icon: getIcons(config.icons, config.browser),
     },
@@ -31,11 +33,12 @@ export default (): string =>
       page: config.optionsHtml,
       open_in_tab: true,
     },
-    background: {
-      scripts: [
-        config.needsPolyfill ? config.polyfill.output : undefined,
-        config.background.output,
-      ].filter((script) => script !== undefined),
+    background: config.serviceWorkerEnabled
+      ? { service_worker: config.background.output }
+      : { scripts: [config.background.output] },
+    // MV3 requires an explicit content security policy for extension pages.
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'self'",
     },
     content_scripts: [
       {

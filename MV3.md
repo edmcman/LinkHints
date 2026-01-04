@@ -4,9 +4,8 @@
 - [x] Browser actions
 - [x] Remove DOM usage from background
 - [x] Replace timers with alarms: not going to
-- [ ] Update the manifest
+- [x] Update the manifest
 - [x] Inject into pre-existing tabs. tabs.executeScript? Do we need this with MV3?
-- [ ] How are hints injected?
 
 ## Minor
 
@@ -20,3 +19,4 @@
 - [ ] Switch to chrome apis
 - [ ] Remove api compatibility shims
 - [x] `runContentScriptsInExistingTabs` is not yet implemented for MV3.
+- [ ] Figure out browser_style

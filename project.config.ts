@@ -65,13 +65,14 @@ export default {
     input: "icons.tsx",
     output: "../icon.svg",
   },
+  serviceWorkerEnabled: serviceWorkerEnabled(currentBrowser),
   needsPolyfill: needsPolyfill(currentBrowser),
   polyfill: {
     input: "../node_modules/webextension-polyfill/dist/browser-polyfill.min.js",
     output: "browser-polyfill.js",
   },
   background: {
-    input: "background/main.ts",
+    input: "background/entry.ts",
     output: "background.js",
   },
   worker: {
@@ -170,6 +171,16 @@ function browserSpecificIgnores(browser: Browser | undefined): Array<string> {
       return ["icons/png-*"];
     case undefined:
       return [];
+  }
+}
+
+function serviceWorkerEnabled(browser: Browser | undefined): boolean {
+  switch (browser) {
+    case "chrome":
+      return true;
+    case "firefox":
+    case undefined:
+      return false;
   }
 }
 
