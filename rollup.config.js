@@ -40,11 +40,19 @@ setup();
 const main = [
   js(config.background),
   js(config.worker),
+  js(config.injected),
   js(config.renderer),
+  js(config.rendererHost),
   js(config.popup),
   js(config.options),
   template(config.manifest),
   template(config.iconsCompilation),
+  html({
+    title: `${config.meta.name} Renderer Frame`,
+    html: "renderer/frame.html",
+    js: [config.renderer.output],
+    css: [],
+  }),
   html({
     title: `${config.meta.name} Popup`,
     html: config.popupHtml,
@@ -153,6 +161,7 @@ function js({ input, output }) {
     output: {
       file: output,
       format: "iife",
+      name: path.basename(output, path.extname(output)).replace(/-/g, "_"),
       sourcemap: !PROD,
       externalLiveBindings: false,
     },

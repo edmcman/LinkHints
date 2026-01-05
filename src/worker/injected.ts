@@ -1,4 +1,4 @@
-import { makeRandomToken } from "../shared/main";
+import { log, makeRandomToken } from "../shared/main";
 
 // This file is injected as a regular script in all pages and overrides
 // `.addEventListener` (and friends) so we can detect click listeners.
@@ -69,7 +69,7 @@ export type FromInjected =
   | { type: "Queue"; hasQueue: boolean }
   | { type: "ShadowRootCreated"; shadowRoot: ShadowRoot };
 
-export default (communicator?: {
+export const injected = (communicator?: {
   onInjectedMessage: (message: FromInjected) => unknown;
   addEventListener: (
     eventName: string,
@@ -77,6 +77,8 @@ export default (communicator?: {
     _?: true
   ) => unknown;
 }): void => {
+  log("log", "injected() called");
+
   // Refers to the page `window` both in Firefox and other browsers.
   const win = BROWSER === "firefox" ? window.wrappedJSObject ?? window : window;
 
@@ -1008,3 +1010,9 @@ export default (communicator?: {
 
   hookManager.conceal();
 };
+
+// Auto-execute when loaded as a MAIN-world content script.
+if (BROWSER !== "firefox") {
+  log("log", "Injecting injected.ts as a MAIN-world content script");
+  injected();
+}

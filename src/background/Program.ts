@@ -8,6 +8,7 @@ import {
   getChromiumVariant,
   insertCSSInTab,
 } from "../shared/apiCompatibility";
+import { CSS } from "../shared/css";
 import {
   elementKey,
   ElementRender,
@@ -89,6 +90,7 @@ type TabState = {
   perf: Perf;
   isOptionsPage: boolean;
   isPinned: boolean;
+  rendererFrameId?: number;
 };
 
 type HintsState =
@@ -348,7 +350,9 @@ export default class BackgroundProgram {
   }
 
   sendRendererMessage(message: ToRenderer, { tabId }: { tabId: number }): void {
-    const recipient = { tabId, frameId: TOP_FRAME_ID };
+    const tabState = this.tabState.get(tabId);
+    const frameId = tabState?.rendererFrameId ?? TOP_FRAME_ID;
+    const recipient = { tabId, frameId };
     log("log", "BackgroundProgram#sendRendererMessage", message, recipient);
     fireAndForget(
       this.sendContentMessage({ type: "ToRenderer", message }, recipient),
@@ -1551,6 +1555,10 @@ export default class BackgroundProgram {
 
     switch (message.type) {
       case "RendererScriptAdded":
+        // Remember which frame is hosting the renderer so that we can
+        // target it directly in the future (including inserting CSS into it).
+        tabState.rendererFrameId = info.frameId;
+
         this.sendRendererMessage(
           {
             type: "StateSync",
@@ -1558,6 +1566,24 @@ export default class BackgroundProgram {
             logLevel: log.level,
           },
           { tabId: info.tabId }
+        );
+
+        // Insert renderer CSS directly into the renderer frame (MV3 will
+        // target the frameId; for MV2 this will fall back to tab-wide insert).
+        fireAndForget(
+          insertCSSInTab(
+            info.tabId,
+            {
+              code: `${CSS}\n\n${this.options.values.css}`,
+              cssOrigin: "author",
+              runAt: "document_start",
+            },
+            info.frameId
+          ),
+          "BackgroundProgram#onRendererMessage",
+          "Failed to insert renderer CSS",
+          message,
+          info
         );
         // Both uBlock Origin and Adblock Plus use `browser.tabs.insertCSS` with
         // `{ display: none !important; }` and `cssOrigin: "user"` to hide

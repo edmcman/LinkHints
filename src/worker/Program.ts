@@ -99,6 +99,7 @@ export default class WorkerProgram {
   });
 
   async start(): Promise<void> {
+    log("log", "WorkerProgram#start");
     this.resets.add(
       addListener(
         browser.runtime.onMessage,

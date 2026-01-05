@@ -63,7 +63,8 @@ export async function insertCSSInTab(
     files?: Array<string>;
     cssOrigin?: "author" | "user";
     runAt?: "document_end" | "document_idle" | "document_start";
-  }
+  },
+  frameId?: number
 ): Promise<void> {
   type TabsApi = {
     insertCSS?: (
@@ -97,17 +98,22 @@ export async function insertCSSInTab(
       target: { tabId: number };
       css?: string;
       files?: Array<string>;
-      cssOrigin?: "author" | "user";
-      runAt?: "document_end" | "document_idle" | "document_start";
+      origin?: "AUTHOR" | "USER";
     }) => Promise<void>;
   };
 
   const scripting = getScriptingApi() as Scripting;
-  const { code, ...rest } = details;
+  const { code, cssOrigin, runAt, ...rest } = details;
 
   await scripting.insertCSS({
-    target: { tabId },
+    target: {
+      tabId,
+      ...(frameId !== undefined ? { frameIds: [frameId] } : {}),
+    },
     ...(code !== undefined ? { css: code } : {}),
+    ...(cssOrigin !== undefined
+      ? { origin: cssOrigin.toUpperCase() as "AUTHOR" | "USER" }
+      : {}),
     ...rest,
   });
 }

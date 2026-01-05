@@ -14,11 +14,7 @@ export default (): string =>
     homepage_url: config.meta.homepage,
     browser_specific_settings: getBrowserSpecificSettings(config.browser),
     icons: getIcons(config.icons, config.browser),
-    permissions: [
-      // Non-host permissions.
-      // Needed to store options.
-      "storage",
-    ],
+    permissions: ["storage", "scripting"],
     host_permissions: [
       // Host patterns moved to host_permissions for MV3.
       "<all_urls>",
@@ -41,6 +37,18 @@ export default (): string =>
       extension_pages: "script-src 'self'; object-src 'self'",
     },
     content_scripts: [
+      config.injectedAsContentScript
+        ? {
+            matches: ["<all_urls>"],
+            all_frames: true,
+            match_about_blank: true,
+            run_at: "document_start",
+            world: "MAIN",
+            js: [config.injected.output].filter(
+              (script) => script !== undefined
+            ),
+          }
+        : undefined,
       {
         matches: ["<all_urls>"],
         all_frames: true,
@@ -51,6 +59,7 @@ export default (): string =>
           config.worker.output,
         ].filter((script) => script !== undefined),
       },
+
       {
         matches: ["<all_urls>"],
         run_at: "document_start",
@@ -62,8 +71,14 @@ export default (): string =>
           // It’s a tiny bit wasteful to load the polyfill twice in the top
           // frame, but it’s not so bad.
           config.needsPolyfill ? config.polyfill.output : undefined,
-          config.renderer.output,
+          config.rendererHost.output,
         ].filter((script) => script !== undefined),
+      },
+    ].filter((s) => s !== undefined),
+    web_accessible_resources: [
+      {
+        resources: [config.renderer.output, "renderer/frame.html"],
+        matches: ["<all_urls>"],
       },
     ],
   });

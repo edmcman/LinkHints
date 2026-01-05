@@ -15,8 +15,10 @@
 
 ## Todo
 
+- [ ] Update comments in injected.ts
 - [ ] Remove polyfill
 - [ ] Switch to chrome apis
 - [ ] Remove api compatibility shims
 - [x] `runContentScriptsInExistingTabs` is not yet implemented for MV3.
 - [ ] Figure out browser_style
+- [ ] insertCSSInTab frame for mv2?

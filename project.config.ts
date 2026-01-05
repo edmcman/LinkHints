@@ -66,6 +66,7 @@ export default {
     output: "../icon.svg",
   },
   serviceWorkerEnabled: serviceWorkerEnabled(currentBrowser),
+  injectedAsContentScript: injectedAsContentScript(currentBrowser),
   needsPolyfill: needsPolyfill(currentBrowser),
   polyfill: {
     input: "../node_modules/webextension-polyfill/dist/browser-polyfill.min.js",
@@ -79,9 +80,17 @@ export default {
     input: "worker/main.ts",
     output: "worker.js",
   },
+  injected: {
+    input: "worker/injected.ts",
+    output: "injected.js",
+  },
   renderer: {
     input: "renderer/main.ts",
     output: "renderer.js",
+  },
+  rendererHost: {
+    input: "renderer/host.ts",
+    output: "renderer-host.js",
   },
   popup: {
     input: "popup/main.ts",
@@ -171,6 +180,16 @@ function browserSpecificIgnores(browser: Browser | undefined): Array<string> {
       return ["icons/png-*"];
     case undefined:
       return [];
+  }
+}
+
+function injectedAsContentScript(browser: Browser | undefined): boolean {
+  switch (browser) {
+    case "chrome":
+      return true;
+    case "firefox":
+    case undefined:
+      return false;
   }
 }
 
