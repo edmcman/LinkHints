@@ -71,16 +71,10 @@ export default (): string =>
           // It’s a tiny bit wasteful to load the polyfill twice in the top
           // frame, but it’s not so bad.
           config.needsPolyfill ? config.polyfill.output : undefined,
-          config.rendererHost.output,
+          config.renderer.output,
         ].filter((script) => script !== undefined),
       },
     ].filter((s) => s !== undefined),
-    web_accessible_resources: [
-      {
-        resources: [config.renderer.output, "renderer/frame.html"],
-        matches: ["<all_urls>"],
-      },
-    ],
   });
 
 function toJSON(obj: Record<string, unknown>): string {

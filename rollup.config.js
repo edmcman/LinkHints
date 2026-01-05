@@ -42,17 +42,10 @@ const main = [
   js(config.worker),
   js(config.injected),
   js(config.renderer),
-  js(config.rendererHost),
   js(config.popup),
   js(config.options),
   template(config.manifest),
   template(config.iconsCompilation),
-  html({
-    title: `${config.meta.name} Renderer Frame`,
-    html: "renderer/frame.html",
-    js: [config.renderer.output],
-    css: [],
-  }),
   html({
     title: `${config.meta.name} Popup`,
     html: config.popupHtml,

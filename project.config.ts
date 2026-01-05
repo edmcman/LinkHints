@@ -88,10 +88,6 @@ export default {
     input: "renderer/main.ts",
     output: "renderer.js",
   },
-  rendererHost: {
-    input: "renderer/host.ts",
-    output: "renderer-host.js",
-  },
   popup: {
     input: "popup/main.ts",
     output: "popup.js",
