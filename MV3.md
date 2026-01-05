@@ -15,6 +15,7 @@
 
 ## Todo
 
+- [ ] Restore test to use run-pty
 - [ ] Update comments in injected.ts
 - [ ] Remove polyfill
 - [ ] Switch to chrome apis
