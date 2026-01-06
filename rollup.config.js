@@ -157,6 +157,8 @@ function js({ input, output }) {
       name: path.basename(output, path.extname(output)).replace(/-/g, "_"),
       sourcemap: !PROD,
       externalLiveBindings: false,
+      // Needed for polyfill in background
+      inlineDynamicImports: true,
     },
     plugins: [
       replace({ ...makeGlobals(), preventAssignment: false }),

@@ -18,6 +18,7 @@
 - [ ] Restore test to use run-pty
 - [ ] Update comments in injected.ts
 - [ ] Remove polyfill
+- [ ] Remove src/background/entry.ts after removing polyfill
 - [ ] Switch to chrome apis
 - [ ] Remove api compatibility shims
 - [x] `runContentScriptsInExistingTabs` is not yet implemented for MV3.

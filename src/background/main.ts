@@ -1,15 +1,19 @@
-import { fireAndForget } from "../shared/main";
+import { fireAndForget, log } from "../shared/main";
 import BackgroundProgram from "./Program";
 
-const program = new BackgroundProgram();
+export function main(): void {
+  log("log", "Background: main.ts starting up...");
 
-fireAndForget(program.start(), "main->BackgroundProgram#start");
+  const program = new BackgroundProgram();
 
-// Attach the instance to the background page's `window` for debugging. This
-// means one can type `program` in the console opened from `about:debugging` or
-// `chrome://extensions` to look at the current state of things.
-// This is for debugging only, and should never be accessed in the code.
-if (typeof window !== "undefined") {
-  // Only works in MV2 background pages, not MV3 service workers.
-  (window as Window & { program?: typeof program }).program = program;
+  fireAndForget(program.start(), "main->BackgroundProgram#start");
+
+  // Attach the instance to the background page's `window` for debugging. This
+  // means one can type `program` in the console opened from `about:debugging` or
+  // `chrome://extensions` to look at the current state of things.
+  // This is for debugging only, and should never be accessed in the code.
+  if (typeof window !== "undefined") {
+    // Only works in MV2 background pages, not MV3 service workers.
+    (window as Window & { program?: typeof program }).program = program;
+  }
 }
