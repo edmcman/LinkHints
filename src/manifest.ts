@@ -54,6 +54,7 @@ export default (): string =>
         all_frames: true,
         match_about_blank: true,
         run_at: "document_start",
+        world: "ISOLATED",
         js: [
           config.needsPolyfill ? config.polyfill.output : undefined,
           config.worker.output,
