@@ -316,7 +316,7 @@ test("Run through tutorial", async ({
 
     // Verify clipboard contents
     try {
-    await context.grantPermissions(["clipboard-read"]);
+      await context.grantPermissions(["clipboard-read"]);
     } catch (e) {
       console.log("Could not grant clipboard-read permission:", e);
     }
