@@ -137,6 +137,10 @@ jobs:
       - name: Run Playwright tests
         run: xvfb-run -a npm run test:playwright:${{ matrix.browser }}
 
+      - name: Fix apt cache perms for saving
+        if: always()
+        run: sudo chmod -R a+rwX /var/cache/apt/archives
+
       - name: Upload test results
         uses: actions/upload-artifact@v6
         with:
