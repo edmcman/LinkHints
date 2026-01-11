@@ -23,6 +23,7 @@ async function activateHints(
   );
   // UGH I want to get rid of this so bad.
   await page.waitForTimeout(200);
+  console.log("Pressing keystroke to activate hints:", keystroke);
   await page.keyboard.press(keystroke);
   await page.waitForFunction(
     () =>
@@ -80,8 +81,10 @@ async function snapshotHints(page: Page, snapshotName: string): Promise<void> {
 
 test("Run through tutorial", async ({
   context,
+  browserName,
 }: {
   context: BrowserContext;
+  browserName: string;
 }) => {
   const logs: Array<string> = [];
   try {
@@ -315,10 +318,8 @@ test("Run through tutorial", async ({
     await page.keyboard.press("Alt+n");
 
     // Verify clipboard contents
-    try {
+    if (browserName === "chromium") {
       await context.grantPermissions(["clipboard-read"]);
-    } catch (e) {
-      console.log("Could not grant clipboard-read permission:", e);
     }
     console.log("Checking clipboard contents");
     await expect
@@ -327,8 +328,52 @@ test("Run through tutorial", async ({
     console.log("Verified clipboard contents");
 
     console.log("Tutorial test completed");
+    await test.info().attach("console-logs", {
+      body: JSON.stringify(logs, null, 2),
+      contentType: "application/json",
+    });
   } catch (e) {
     console.log("All logs during test failure:", JSON.stringify(logs, null, 2));
+    await test.info().attach("console-logs", {
+      body: JSON.stringify(logs, null, 2),
+      contentType: "application/json",
+    });
     throw e;
   }
+});
+
+// New test: open the tutorial, wait 1 minute, then press Alt+j
+test("System worker restart during tutorial", async ({
+  context,
+}: {
+  context: BrowserContext;
+}) => {
+  test.setTimeout(120_000);
+  test.fixme(true, "Service workers do not add listeners at top level.");
+
+  // Wait for the tutorial page to load.
+  await new Promise((r) => {
+    setTimeout(r, TUTORIAL_WAIT_MS);
+  });
+
+  const page = await context.newPage();
+  // Capture console logs for debugging if needed
+  const logs: Array<string> = [];
+  page.on("console", (msg) => logs.push(msg.text()));
+
+  await page.goto(tutorialUrl);
+  await page.waitForLoadState("load");
+
+  expect(page.url()).toBe(tutorialUrl);
+  console.log("Tutorial page loaded");
+
+  // Wait one minute
+  await page.waitForTimeout(60_000);
+
+  // Use the helper to activate hints (defaults to Alt+j) and ensure UI appears
+  console.log("Activating hints after waiting 1 minute");
+  await activateHints(page);
+
+  // Snapshot the hints for verification
+  await snapshotHints(page, "shadow-wait-1min.html");
 });
