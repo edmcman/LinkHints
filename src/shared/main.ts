@@ -143,7 +143,7 @@ export function addEventListener<
 }
 
 export function addListener<
-  Listener extends (...args: Array<never>) => void,
+  Listener extends (...args: Array<never>) => unknown,
   Options
 >(
   target: {
@@ -157,7 +157,7 @@ export function addListener<
   // @ts-expect-error This is fine. I have no idea how to fix.
   const wrappedListener: Listener = (...args) => {
     try {
-      listener(...args);
+      return listener(...args);
     } catch (error) {
       log("error", name, error, ...args);
     }
