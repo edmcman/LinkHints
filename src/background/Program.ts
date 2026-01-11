@@ -329,7 +329,10 @@ export default class BackgroundProgram {
     } else {
       // temporarily disable
       //await runContentScriptsInExistingTabs(tabs);
-      log("log", "BackgroundProgram#start skipping runContentScriptsInExistingTabs TODO MV3");
+      log(
+        "log",
+        "BackgroundProgram#start skipping runContentScriptsInExistingTabs TODO MV3"
+      );
     }
   }
 
