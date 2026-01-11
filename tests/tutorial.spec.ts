@@ -315,7 +315,11 @@ test("Run through tutorial", async ({
     await page.keyboard.press("Alt+n");
 
     // Verify clipboard contents
+    try {
     await context.grantPermissions(["clipboard-read"]);
+    } catch (e) {
+      console.log("Could not grant clipboard-read permission:", e);
+    }
     console.log("Checking clipboard contents");
     await expect
       .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
