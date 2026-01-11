@@ -111,6 +111,15 @@ jobs:
         if: steps.cache-node_modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      - name: Cache apt packages
+        id: cache-apt
+        uses: actions/cache@v3
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            apt-${{ runner.os }}-
+
       - name: Install xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
 

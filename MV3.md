@@ -16,6 +16,7 @@
 
 ## Todo
 
+- [ ] Fix PROD behavior
 - [ ] Detect/handle extension removal (previously onDisconnect code)
 - [ ] Ensure that we don't inject into existing tabs on service worker restart
 - [ ] Injecting into existing tabs does not seem to be working on chrome
