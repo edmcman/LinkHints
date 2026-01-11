@@ -81,6 +81,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        browser: [chromium, firefox]
+
     steps:
       - uses: actions/checkout@v3
 
@@ -97,10 +101,11 @@ jobs:
           key: node_modules-${{ hashFiles('package.json', 'package-lock.json') }}
 
       - name: Cache Playwright browsers
+        id: cache-playwright
         uses: actions/cache@v3
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ matrix.browser }}-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: npm ci
         if: steps.cache-node_modules.outputs.cache-hit != 'true'
@@ -113,13 +118,13 @@ jobs:
         run: sudo npx playwright install-deps
 
       - name: Install Playwright browsers
-        run: npx playwright install
+        run: npx playwright install ${{ matrix.browser }}
 
       - name: Run Playwright tests
-        run: xvfb-run -a npm run test:playwright
+        run: xvfb-run -a npm run test:playwright:${{ matrix.browser }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v6
         with:
-          name: test-results
+          name: test-results-${{ matrix.browser }}
           path: test-results/
