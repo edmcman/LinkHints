@@ -111,6 +111,11 @@ jobs:
         if: steps.cache-node_modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      - name: Prepare apt cache dir
+        run: |
+          sudo mkdir -p /var/cache/apt/archives
+          sudo chmod -R a+rw /var/cache/apt/archives || true
+
       - name: Cache apt packages
         id: cache-apt
         uses: actions/cache@v3
