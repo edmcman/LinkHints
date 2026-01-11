@@ -327,7 +327,9 @@ export default class BackgroundProgram {
     if (BROWSER === "firefox") {
       firefoxWorkaround(tabs);
     } else {
-      await runContentScriptsInExistingTabs(tabs);
+      // temporarily disable
+      //await runContentScriptsInExistingTabs(tabs);
+      log("log", "BackgroundProgram#start skipping runContentScriptsInExistingTabs TODO MV3");
     }
   }
 
@@ -2513,6 +2515,8 @@ function shouldCombineHintsForClick(element: ElementWithHint): boolean {
   return url !== undefined && !url.includes("#") && !hasClickListener;
 }
 
+// Intentionally unused for now (kept for future use). Avoid linter error.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function runContentScriptsInExistingTabs(
   tabs: Array<browser.tabs.Tab>
 ): Promise<void> {

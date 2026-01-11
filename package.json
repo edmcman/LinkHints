@@ -14,7 +14,8 @@
     "build:all": "npm run build:chrome && npm run build:firefox",
     "png-icons": "sucrase-node scripts/png-icons.ts",
     "web-ext": "sucrase-node node_modules/.bin/web-ext",
-    "test:playwright": "npm run compile && playwright test --project=firefox",
+    "test:playwright:firefox": "npm run build:firefox && playwright test --project=firefox",
+    "test:playwright:chromium": "npm run build:chrome && playwright test --project=chromium",
     "test": "npm run build:all && eslint . --report-unused-disable-directives && prettier --check . && tsc",
     "test-manual": "run-pty --auto-exit % npm run build:all % eslint . --report-unused-disable-directives % prettier --check . % tsc"
   },

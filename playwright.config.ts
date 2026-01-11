@@ -24,6 +24,15 @@ const config: PlaywrightTestConfig = {
         headless: false,
       },
     },
+    {
+      name: "chromium",
+      use: {
+        browserName: "chromium",
+        // use Playwright's bundled Chromium (no channel specified)
+        // extensions need to be loaded in headed mode
+        headless: false,
+      },
+    },
   ],
 };
 

@@ -199,7 +199,8 @@ export default class RendererProgram {
     // cleanups when a WebExtension is disabled in Firefox. See:
     // <bugzil.la/1223425>
     browser.runtime.connect().onDisconnect.addListener(() => {
-      this.stop();
+      log("log", "RendererProgram#onDisconnect MV3 FIXME");
+      // this.stop();
     });
   }
 

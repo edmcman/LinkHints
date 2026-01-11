@@ -6,6 +6,7 @@
 - [x] Replace timers with alarms: not going to
 - [x] Update the manifest
 - [x] Inject into pre-existing tabs. tabs.executeScript? Do we need this with MV3?
+- [ ] Add listeners synchronously at top level in service worker
 
 ## Minor
 
@@ -15,6 +16,8 @@
 
 ## Todo
 
+- [ ] Detect/handle extension removal (previously onDisconnect code)
+- [ ] Ensure that we don't inject into existing tabs on service worker restart
 - [ ] Injecting into existing tabs does not seem to be working on chrome
 - [ ] Decide how to handle builds since we can't currently build a single version in `compiled` that works with both chrome and firefox.
 - [ ] Enable chromium playwright tests.

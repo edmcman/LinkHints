@@ -121,7 +121,8 @@ export default class WorkerProgram {
       return;
     }
     browser.runtime.connect().onDisconnect.addListener(() => {
-      this.stop();
+      log("log", "WorkerProgram#onDisconnect MV3 FIXME");
+      // this.stop();
     });
   }
 
