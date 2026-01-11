@@ -46,7 +46,8 @@ export default {
     webExtBaseName: `link_hints-${VERSION}`,
     geckoId: "linkhints@lydell.github.io",
   },
-  prod: currentBrowser !== undefined,
+  // XXX MV3 FIXME
+  prod: false, //currentBrowser !== undefined,
   browser: currentBrowser,
   src: "src",
   compiled: "compiled",
