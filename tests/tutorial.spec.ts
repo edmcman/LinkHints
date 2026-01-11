@@ -315,6 +315,8 @@ test("Run through tutorial", async ({
     await page.keyboard.press("Alt+n");
 
     // Verify clipboard contents
+    await context.grantPermissions(["clipboard-read"]);
+    console.log("Checking clipboard contents");
     await expect
       .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
       .toBe("Link Hints adds two extra shortcuts:");
