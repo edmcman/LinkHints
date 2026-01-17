@@ -219,6 +219,25 @@ export default class BackgroundProgram {
     };
   }
 
+  /**
+   * Register minimal, critical listeners synchronously so messages sent
+   * immediately on worker restart are not lost.
+   */
+  addEarlyListeners(): void {
+    this.resets.add(
+      addListener(
+        browser.runtime.onMessage,
+        this.onMessage.bind(this),
+        "BackgroundProgram#onMessage"
+      ),
+      addListener(
+        browser.runtime.onConnect,
+        this.onConnect.bind(this),
+        "BackgroundProgram#onConnect"
+      )
+    );
+  }
+
   async start(): Promise<void> {
     log("log", "BackgroundProgram#start", BROWSER, PROD);
 
@@ -260,17 +279,8 @@ export default class BackgroundProgram {
       log("error", "BackgroundProgram#start->restoreAllTabStates", error);
     }
 
+    // See addEarlyListeners() also.
     this.resets.add(
-      addListener(
-        browser.runtime.onMessage,
-        this.onMessage.bind(this),
-        "BackgroundProgram#onMessage"
-      ),
-      addListener(
-        browser.runtime.onConnect,
-        this.onConnect.bind(this),
-        "BackgroundProgram#onConnect"
-      ),
       addListener(
         browser.tabs.onActivated,
         this.onTabActivated.bind(this),

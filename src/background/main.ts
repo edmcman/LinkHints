@@ -6,6 +6,10 @@ export function main(): void {
 
   const program = new BackgroundProgram();
 
+  // Register critical listeners synchronously so messages sent immediately
+  // on service-worker restart are not lost.
+  program.addEarlyListeners();
+
   fireAndForget(program.start(), "main->BackgroundProgram#start");
 
   // Attach the instance to the background page's `window` for debugging. This

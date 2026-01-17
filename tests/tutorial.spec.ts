@@ -349,7 +349,6 @@ test("System worker restart during tutorial", async ({
   context: BrowserContext;
 }) => {
   test.setTimeout(120_000);
-  test.fixme(true, "Service workers do not add listeners at top level.");
 
   // Wait for the tutorial page to load.
   await new Promise((r) => {

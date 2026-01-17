@@ -6,7 +6,7 @@
 - [x] Replace timers with alarms: not going to
 - [x] Update the manifest
 - [x] Inject into pre-existing tabs. tabs.executeScript? Do we need this with MV3?
-- [ ] Add listeners synchronously at top level in service worker
+- [x] Add listeners synchronously at top level in service worker
 
 ## Minor
 
