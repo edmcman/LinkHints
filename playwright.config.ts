@@ -13,8 +13,11 @@ const config: PlaywrightTestConfig = {
   use: {
     actionTimeout: 10_000,
     navigationTimeout: 10_000,
+    trace: "retain-on-failure",
+    video: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
-  reporter: "list",
+  reporter: [["list"], ["html", { open: "never" }]],
   projects: [
     {
       name: "firefox",
