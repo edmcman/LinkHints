@@ -1,6 +1,6 @@
 # MV3 Checklist
 
-- [ ] firefox service worker test is flaky
+- [ ] service worker restart test
 - [x] Serialize storage
 - [x] Browser actions
 - [x] Remove DOM usage from background
