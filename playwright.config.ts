@@ -13,7 +13,7 @@ const config: PlaywrightTestConfig = {
   use: {
     actionTimeout: 10_000,
     navigationTimeout: 10_000,
-    trace: "on-first-retry",
+    trace: "on",
     video: "retain-on-failure",
     screenshot: "only-on-failure",
   },

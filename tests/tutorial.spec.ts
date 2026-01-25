@@ -1,4 +1,5 @@
 import { expect as playwrightExpect } from "@playwright/test";
+import fs from "fs";
 import path from "path";
 import type { BrowserContext, Page } from "playwright";
 import { createFixture } from "playwright-webextext";
@@ -16,6 +17,35 @@ const compiledDir = `compiled-${process.env.BROWSER}`;
 const extensionPath = path.resolve(__dirname, "..", compiledDir);
 
 const { test, expect } = createFixture(extensionPath);
+
+function attachServiceWorkerLogs(
+  context: BrowserContext,
+  outputPath: string
+): void {
+  const writeLog = (text: string): void => {
+    fs.appendFileSync(outputPath, `${text}\n`);
+  };
+
+  const attach = (worker: {
+    on: (event: string, cb: (msg: any) => void) => void;
+    url: () => string;
+  }): void => {
+    writeLog(`--- service worker attached: ${worker.url()} ---`);
+    worker.on("console", (msg: { text: () => string }) => {
+      writeLog(msg.text());
+    });
+    worker.on("pageerror", (error: Error) => {
+      writeLog(`pageerror: ${error.stack ?? error.message}`);
+    });
+  };
+
+  for (const worker of context.serviceWorkers()) {
+    attach(worker);
+  }
+  context.on("serviceworker", (worker) => {
+    attach(worker);
+  });
+}
 
 // Helper to activate hints
 async function activateHints(
@@ -111,6 +141,10 @@ test("Run through tutorial", async ({
 }) => {
   let logs: Array<string> = [];
   try {
+    attachServiceWorkerLogs(
+      context,
+      test.info().outputPath("background-console.log")
+    );
     console.log("Starting tutorial test");
 
     // Wait for the tutorial page to load.
@@ -365,6 +399,10 @@ test("System worker restart during tutorial", async ({
 }: {
   context: BrowserContext;
 }) => {
+  attachServiceWorkerLogs(
+    context,
+    test.info().outputPath("background-console.log")
+  );
   test.setTimeout(120_000);
 
   // Wait for the tutorial page to load.
