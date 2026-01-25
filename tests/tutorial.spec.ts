@@ -132,6 +132,13 @@ async function attachConsoleLogs(
   });
 }
 
+async function emitDump(page: Page, message: string): Promise<void> {
+  await page.evaluate((text) => {
+    // eslint-disable-next-line no-undef
+    dump(text);
+  }, message);
+}
+
 test("Run through tutorial", async ({
   context,
   browserName,
@@ -160,6 +167,9 @@ test("Run through tutorial", async ({
 
     await page.goto(tutorialUrl);
     await page.waitForLoadState("load");
+    if (process.env.BROWSER === "firefox") {
+      await emitDump(page, "TEST_DUMP run-through tutorial loaded");
+    }
 
     expect(page.url()).toBe(tutorialUrl);
     console.log("Tutorial page loaded");
@@ -417,12 +427,18 @@ test("System worker restart during tutorial", async ({
   try {
     await page.goto(tutorialUrl);
     await page.waitForLoadState("load");
+    if (process.env.BROWSER === "firefox") {
+      await emitDump(page, "TEST_DUMP worker-restart tutorial loaded");
+    }
 
     expect(page.url()).toBe(tutorialUrl);
     console.log("Tutorial page loaded");
 
     // Wait one minute
     await page.waitForTimeout(60_000);
+    if (process.env.BROWSER === "firefox") {
+      await emitDump(page, "TEST_DUMP after 60s wait");
+    }
 
     // Use the helper to activate hints (defaults to Alt+j) and ensure UI appears
     console.log("Activating hints after waiting 1 minute");
