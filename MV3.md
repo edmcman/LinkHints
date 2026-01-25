@@ -21,7 +21,7 @@
 - [ ] Detect/handle extension removal (previously onDisconnect code)
 - [ ] Ensure that we don't inject into existing tabs on service worker restart
 - [ ] Injecting into existing tabs does not seem to be working on chrome
-- [ ] Decide how to handle builds since we can't currently build a single version in `compiled` that works with both chrome and firefox.
+- [x] Decide how to handle builds since we can't currently build a single version in `compiled` that works with both chrome and firefox.
 - [x] Enable chromium playwright tests.
 - [ ] Restore test to use run-pty
 - [ ] Update comments in injected.ts

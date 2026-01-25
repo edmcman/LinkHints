@@ -50,7 +50,8 @@ export default {
   prod: false, //currentBrowser !== undefined,
   browser: currentBrowser,
   src: "src",
-  compiled: "compiled",
+  compiled:
+    currentBrowser === undefined ? "compiled" : `compiled-${currentBrowser}`,
   dist: currentBrowser === undefined ? "dist" : `dist-${currentBrowser}`,
   webextIgnoreFiles: [
     "icons/*.!(svg)",

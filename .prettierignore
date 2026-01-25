@@ -2,6 +2,7 @@
 !/.eslintrc.js
 *.custom.js
 /compiled/
+/compiled*/
 /compiled-docs/
 /test-results/
 /tests/*-snapshots/

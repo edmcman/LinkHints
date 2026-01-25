@@ -42,29 +42,29 @@ If you’d like to make a pull request, here’s what you need to know.
 
 These directories are generated and gitignored:
 
-- `compiled/` is the compiled version of `src/`.
+- `compiled-chrome/` and `compiled-firefox/` are the compiled versions of `src`.
 - `compiled-docs/` is the compiled version of `docs/` and is served on <https://lydell.github.io/LinkHints/>.
 - `dist-chrome/` and `dist-firefox/` contains production builds of the extension.
 
 The most important files:
 
-- `project.config.ts` contains information about the whole project, all in one place. Other config files and build scripts read from it. For example, it maps entrypoint files in `src/` to output files in `compiled/`.
-- `rollup.config.js` defines how `compiled/` is made. Rollup compiles and bundles JavaScript; generates `manifest.json`, HTML files and SVG icons; copies the [WebExtension Polyfill], CSS files, and PNG icons; and defines a couple of global variables (see also `@types/globals.d.ts`).
+- `project.config.ts` contains information about the whole project, all in one place. Other config files and build scripts read from it. For example, it maps entrypoint files in `src/` to output files in `compiled-<browser>/`.
+- `rollup.config.js` defines how `compiled-<browser>/` is made. Rollup compiles and bundles JavaScript; generates `manifest.json`, HTML files and SVG icons; copies the [WebExtension Polyfill], CSS files, and PNG icons; and defines a couple of global variables (see also `@types/globals.d.ts`).
 - `web-ext-config.cjs` configures [web-ext], both for building and for running.
 - `custom.config.example.cjs` can be copied into `custom.config.cjs` to customize `web-ext run` as well as default options for development.
 - `src/manifest.ts` is called via Rollup and generates `manifest.json`. In fact, all `.ts` files directly inside `src/` are called via Rollup and generate other files.
-- `src/icons.tsx` generates all SVG icons (even outside `compiled/`). `src/icons/` contains PNG versions of those. They can be updated by running `npm run png-icons` (which requires [Inkscape] and [OptiPNG]). You can preview all icons by opening `compiled/icons/test.html` in a browser.
+- `src/icons.tsx` generates all SVG icons (even outside `compiled-<browser>/`). `src/icons/` contains PNG versions of those. They can be updated by running `npm run png-icons` (which requires [Inkscape] and [OptiPNG]). You can preview all icons by opening `compiled-<browser>/icons/test.html` in a browser.
 - `src/html.tsx` generates HTML files. All HTML files are very minimal. JavaScript is used to render content.
 - `src/css.ts` injects the colors defined in `project.config.ts` into CSS files.
 
 Compilation pipeline:
 
 ```
-       project.config.ts                                     .--> dist-chrome/
-       rollup.config.js                 web-ext-config.cjs  /
-src/ ---------------------> compiled/ ----------------------
-                                                            \
-                                                             '--> dist-firefox/
+       project.config.ts                                               .--> dist-chrome/
+       rollup.config.js                           web-ext-config.cjs  /
+src/ ---------------------> compiled-<browser>/ ----------------------
+                                                                      \
+                                                                       '--> dist-firefox/
 ```
 
 Code structure:
@@ -80,10 +80,10 @@ All of the above directories, except `src/shared/`, have a `Program.ts` file wit
 
 ## Development
 
-When developing, you need to start a watcher (Rollup) that compiles the code as you change it:
+When developing, you need to start a watcher (Rollup) that compiles the code as you change it. For example, to watch and compile for chrome, run:
 
 ```
-npm run watch
+npm run watch:chrome
 ```
 
 It is recommended to set up [TypeScript], [ESLint] and [Prettier] integrations in your editor. You can also run these tools from the command line:
@@ -114,7 +114,7 @@ npm run chrome
 npm run firefox
 ```
 
-The extension is automatically reloaded when files inside `compiled/` change.
+The extension is automatically reloaded when files inside `compiled-<browser>/` change.
 
 The above commands are wrappers around `web-ext run`. To customize how Chrome/Firefox is run, copy `custom.config.example.cjs` to `custom.config.cjs`. The latter file is gitignored, so you can change it however you wish.
 
@@ -125,13 +125,13 @@ It’s also possible to develop in Chrome without using `npm run chrome`.
 1. Open `chrome://extensions`.
 2. Enable “Developer mode” there.
 3. Click “Load unpacked”.
-4. Choose the `compiled/` directory in this repo.
+4. Choose the `compiled-chrome/` directory in this repo.
 
 Link Hints should now be installed. You need to press the refresh button after you make changes to the code.
 
 ### Shortcut
 
-`npm start` starts `npm run watch`, `npm run firefox` and `npm run chrome` all at once using [run-pty].
+`npm start:chrome` or `npm start:firefox` starts the watchers and browsers (equivalent to running `npm run watch:chrome`/`npm run watch:firefox` together with `npm run chrome`/`npm run firefox`) all at once using [run-pty].
 
 ### Website
 
@@ -144,8 +144,6 @@ If you want to install a locally built version of Link Hints, follow these instr
 ### Chrome
 
 You can install Link Hints as an “unpacked” extension, as mentioned in the [Manual workflow in Chrome](#manual-workflow-in-chrome) section.
-
-However, for daily use you might not want to depend on the `compiled/` directory to always exist and contain correct files. For example, if you run `npm run build:firefox`, the `compiled/` directory will contain Firefox-specific code and won’t work in Chrome.
 
 The alternative is to pack the extension and install that.
 
@@ -165,8 +163,6 @@ Note: Regular Firefox does not allow installing _unsigned_ extensions. You can [
 3. Set `xpinstall.signatures.required` to `false`. (Note: This does not work in regular Firefox – see above.)
 4. Go to `File > Open File…` or press `ctrl+O`.
 5. Choose `dist-firefox/link_hints-X.X.X.xpi`. (Note: `.xpi`, not `.zip`.)
-
-Note: If you regularly develop for Chrome, you might want to run `npm run build:firefox && npm run compile` instead of just `npm run build:firefox`. Otherwise your `compiled/` directory will contain Firefox-specific code that won’t work in Chrome. `npm run compile` is like `npm run watch` but it only runs once and does not start watching for changes.
 
 [chrome]: https://www.google.com/chrome/
 [chromium]: https://www.chromium.org

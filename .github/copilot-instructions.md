@@ -2,7 +2,7 @@
 
 ## Big picture
 - This is a WebExtension built from TypeScript (+ some Preact UIs). Source lives in `src/`.
-- Rollup builds everything into `compiled/` (Sucrase strips TS/JSX). `tsc` is used for type-checking only.
+- Rollup builds everything into `compiled-<browser>`. (Sucrase strips TS/JSX). `tsc` is used for type-checking only.
 - Build/entrypoint mapping is centralized in `project.config.ts` and consumed by `rollup.config.js`.
 
 ## Key modules
@@ -26,10 +26,10 @@
 - Build-time globals are injected by Rollup and typed in `@types/globals.d.ts` (`BROWSER`, `PROD`, `META_*`, `COLOR_*`, `DEFAULT_*`). Don’t try to “import config” for these.
 
 ## Generated outputs (don’t edit)
-- Do not edit `compiled/`, `compiled-docs/`, or `dist-*`.
+- Do not edit `compiled*`, `compiled-docs/`, or `dist-*`.
 - Template generators called by Rollup:
-  - `src/manifest.ts` → `compiled/manifest.json`
-  - `src/html.tsx` → minimal HTML shells in `compiled/`
+  - `src/manifest.ts` → `compiled-<browser>/manifest.json`
+  - `src/html.tsx` → minimal HTML shells in `compiled-<browser>/`
   - `src/icons.tsx` (+ `src/icons/`) → icons; update PNGs via `npm run png-icons`
   - `src/css.ts` → injects colors from `project.config.ts` into CSS
 
@@ -37,9 +37,9 @@
 - Install: `npm ci`
 - Type-check/lint/format check/build: `npm test`
 - Run e2e tests: `npm run test:playwright`
-- Build once (writes `compiled/`): `npm run compile`
-- Watch build: `npm run watch`
-- Run extension (auto-reloads on `compiled/` changes): `npm run firefox` / `npm run chrome`
+- Build once (writes `compiled-<browser>`): use `npm run build:chrome` or `npm run build:firefox`. (Tooling note: internal `*:helper` scripts exist for automation; do not run them directly.)
+- Watch build: use `npm run watch:chrome` or `npm run watch:firefox`. Prefer `npm run start:chrome` / `npm run start:firefox` to run browsers along with the watcher.
+- Run extension (auto-reloads on `compiled-<browser>/` changes): `npm run firefox` / `npm run chrome`
 - Shortcut to run watch + both browsers: `npm start`
 
 ## Change guidance (repo-specific)
