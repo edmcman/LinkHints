@@ -3,7 +3,7 @@ import { pathToFileURL } from "url";
 
 import { expect, test } from "../fixture";
 
-test.fail("Hidden class is not hidden", async ({ page }) => {
+test("Hidden class is not hidden", async ({ page }) => {
   const fileUrl = pathToFileURL(
     path.join(process.cwd(), "tests", "unit", "hidden-class.html")
   ).toString();
