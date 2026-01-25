@@ -135,7 +135,7 @@ async function attachConsoleLogs(
 async function emitDump(page: Page, message: string): Promise<void> {
   await page.evaluate((text) => {
     // eslint-disable-next-line no-undef
-    dump(text);
+    dump(`${text}\n`);
   }, message);
 }
 
@@ -169,6 +169,7 @@ test("Run through tutorial", async ({
     await page.waitForLoadState("load");
     if (process.env.BROWSER === "firefox") {
       await emitDump(page, "TEST_DUMP run-through tutorial loaded");
+      await emitDump(page, "TEST_DUMP run-through start hints");
     }
 
     expect(page.url()).toBe(tutorialUrl);
@@ -177,6 +178,9 @@ test("Run through tutorial", async ({
     // Activate hints
     console.log("Activating hints for initial step");
     await activateHints(page);
+    if (process.env.BROWSER === "firefox") {
+      await emitDump(page, "TEST_DUMP run-through initial hints active");
+    }
 
     // Snapshot
     await snapshotHints(page, "shadow.html");
@@ -443,6 +447,9 @@ test("System worker restart during tutorial", async ({
     // Use the helper to activate hints (defaults to Alt+j) and ensure UI appears
     console.log("Activating hints after waiting 1 minute");
     await activateHints(page);
+    if (process.env.BROWSER === "firefox") {
+      await emitDump(page, "TEST_DUMP after activateHints");
+    }
 
     // Snapshot the hints for verification
     await snapshotHints(page, "shadow-wait-1min.html");
