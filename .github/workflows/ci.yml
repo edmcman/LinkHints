@@ -76,8 +76,12 @@ jobs:
         run: npm ci
 
       - name: Install Chrome key if available
-        if: ${{ secrets.CHROME_KEY_PEM != '' }}
-        run: mkdir -p dist-chrome && printf '%s' "${{ secrets.CHROME_KEY_PEM }}" | base64 --decode > dist-chrome/key.pem && chmod 600 dist-chrome/key.pem
+        run: |
+          if [ -n "${{ secrets.CHROME_KEY_PEM }}" ]; then
+            mkdir -p dist-chrome
+            printf '%s' "${{ secrets.CHROME_KEY_PEM }}" | base64 --decode > dist-chrome/key.pem
+            chmod 600 dist-chrome/key.pem
+          fi
 
       - name: npm test
         run: npm test
