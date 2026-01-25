@@ -283,7 +283,7 @@ test("System worker restart during tutorial", async ({
     browserName === "firefox",
     "Firefox service worker restart test is flaky."
   );
-  test.setTimeout(120_000);
+  test.setTimeout(300_000);
 
   // Wait for the tutorial page to load.
   await new Promise((r) => {
@@ -301,15 +301,15 @@ test("System worker restart during tutorial", async ({
     expect(page.url()).toBe(tutorialUrl);
     console.log("Tutorial page loaded");
 
-    // Wait one minute
-    await page.waitForTimeout(60_000);
+    // Wait two minutes
+    await page.waitForTimeout(120_000);
 
     // Use the helper to activate hints (defaults to Alt+j) and ensure UI appears
-    console.log("Activating hints after waiting 1 minute");
+    console.log("Activating hints after waiting 2 minutes");
     await activateHints(page);
 
     // Snapshot the hints for verification
-    await snapshotHints(page, "shadow-wait-1min.html");
+    await snapshotHints(page, "shadow-wait-2min.html");
 
     // Attach captured logs for debugging ✅
     await attachConsoleLogs("console-logs-system-worker-restart", logs);
