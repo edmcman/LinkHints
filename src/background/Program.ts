@@ -1665,19 +1665,19 @@ export default class BackgroundProgram {
         // classes, but I don’t think it’s worth the trouble.
         // Also, hide the backdrop of Link Hints’ container (it is a popover),
         // for sites with styles like `::backdrop { background-color: rgba(0, 0, 0, 0.2) }`
-        fireAndForget(
-          this.insertCssWithRetry(info.tabId, {
-            code: `${`#${CONTAINER_ID}`.repeat(
-              255
-            )} { display: block !important; &::backdrop { display: none !important; } }`,
-            cssOrigin: "user",
-            runAt: "document_start",
-          }),
-          "BackgroundProgram#onRendererMessage",
-          "Failed to insert adblock workaround CSS",
-          message,
-          info
-        );
+        // fireAndForget(
+        //   this.insertCssWithRetry(info.tabId, {
+        //     code: `${`#${CONTAINER_ID}`.repeat(
+        //       255
+        //     )} { display: block !important; &::backdrop { display: none !important; } }`,
+        //     cssOrigin: "user",
+        //     runAt: "document_start",
+        //   }),
+        //   "BackgroundProgram#onRendererMessage",
+        //   "Failed to insert adblock workaround CSS",
+        //   message,
+        //   info
+        // );
         break;
 
       case "Rendered": {
