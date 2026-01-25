@@ -279,7 +279,7 @@ test("System worker restart during tutorial", async ({
   context: BrowserContext;
   browserName: string;
 }) => {
-  test.fixme(
+  test(
     browserName === "firefox",
     "Firefox service worker restart test is flaky."
   );
