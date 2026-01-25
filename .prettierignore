@@ -6,5 +6,6 @@
 /compiled-docs/
 /test-results/
 /tests/*-snapshots/
+/playwright-report/
 *.json
 /rollup.config-*.js

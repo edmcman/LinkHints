@@ -85,6 +85,23 @@ async function snapshotHints(page: Page, snapshotName: string): Promise<void> {
   await playwrightExpect(page).toHaveScreenshot();
 }
 
+// Helpers for console log capture (deduplicated)
+function startConsoleCapture(page: Page): Array<string> {
+  const logs: Array<string> = [];
+  page.on("console", (msg) => logs.push(msg.text()));
+  return logs;
+}
+
+async function attachConsoleLogs(
+  name: string,
+  logs: Array<string>
+): Promise<void> {
+  await test.info().attach(name, {
+    body: JSON.stringify(logs, null, 2),
+    contentType: "application/json",
+  });
+}
+
 test("Run through tutorial", async ({
   context,
   browserName,
@@ -92,7 +109,7 @@ test("Run through tutorial", async ({
   context: BrowserContext;
   browserName: string;
 }) => {
-  const logs: Array<string> = [];
+  let logs: Array<string> = [];
   try {
     console.log("Starting tutorial test");
 
@@ -105,7 +122,7 @@ test("Run through tutorial", async ({
     const page = await context.newPage();
 
     // Capture console logs from the page (including content scripts)
-    page.on("console", (msg) => logs.push(msg.text()));
+    logs = startConsoleCapture(page);
 
     await page.goto(tutorialUrl);
     await page.waitForLoadState("load");
@@ -334,16 +351,10 @@ test("Run through tutorial", async ({
     console.log("Verified clipboard contents");
 
     console.log("Tutorial test completed");
-    await test.info().attach("console-logs", {
-      body: JSON.stringify(logs, null, 2),
-      contentType: "application/json",
-    });
+    await attachConsoleLogs("console-logs", logs);
   } catch (e) {
     console.log("All logs during test failure:", JSON.stringify(logs, null, 2));
-    await test.info().attach("console-logs", {
-      body: JSON.stringify(logs, null, 2),
-      contentType: "application/json",
-    });
+    await attachConsoleLogs("console-logs", logs);
     throw e;
   }
 });
@@ -363,22 +374,33 @@ test("System worker restart during tutorial", async ({
 
   const page = await context.newPage();
   // Capture console logs for debugging if needed
-  const logs: Array<string> = [];
-  page.on("console", (msg) => logs.push(msg.text()));
+  const logs = startConsoleCapture(page);
 
-  await page.goto(tutorialUrl);
-  await page.waitForLoadState("load");
+  try {
+    await page.goto(tutorialUrl);
+    await page.waitForLoadState("load");
 
-  expect(page.url()).toBe(tutorialUrl);
-  console.log("Tutorial page loaded");
+    expect(page.url()).toBe(tutorialUrl);
+    console.log("Tutorial page loaded");
 
-  // Wait one minute
-  await page.waitForTimeout(60_000);
+    // Wait one minute
+    await page.waitForTimeout(60_000);
 
-  // Use the helper to activate hints (defaults to Alt+j) and ensure UI appears
-  console.log("Activating hints after waiting 1 minute");
-  await activateHints(page);
+    // Use the helper to activate hints (defaults to Alt+j) and ensure UI appears
+    console.log("Activating hints after waiting 1 minute");
+    await activateHints(page);
 
-  // Snapshot the hints for verification
-  await snapshotHints(page, "shadow-wait-1min.html");
+    // Snapshot the hints for verification
+    await snapshotHints(page, "shadow-wait-1min.html");
+
+    // Attach captured logs for debugging ✅
+    await attachConsoleLogs("console-logs-system-worker-restart", logs);
+  } catch (e) {
+    console.log(
+      "All logs during system worker restart test failure:",
+      JSON.stringify(logs, null, 2)
+    );
+    await attachConsoleLogs("console-logs-system-worker-restart", logs);
+    throw e;
+  }
 });

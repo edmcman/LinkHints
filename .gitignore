@@ -7,3 +7,4 @@
 /dist*/
 /test-results
 /.tool-versions
+/playwright-report/index.html
