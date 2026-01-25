@@ -85,6 +85,9 @@ function maybeRelayLog(level: LogLevel, args: Array<unknown>): void {
   }
   const b = (globalThis as unknown as { browser?: unknown }).browser as
     | {
+        runtime?: {
+          sendMessage?: (message: unknown) => Promise<unknown>;
+        };
         tabs?: {
           query?: (queryInfo: Record<string, unknown>) => Promise<
             Array<{ id?: number }>
@@ -93,24 +96,35 @@ function maybeRelayLog(level: LogLevel, args: Array<unknown>): void {
         };
       }
     | undefined;
-  if (b?.tabs?.query === undefined || b?.tabs?.sendMessage === undefined) {
+  if (b === undefined) {
     return;
   }
   const message = args.map(formatRelayArg).join(" ");
-  void b.tabs
-    .query({})
-    .then((tabs) => {
-      for (const tab of tabs) {
-        if (typeof tab.id === "number") {
-          void b.tabs.sendMessage(tab.id, {
-            type: "RelayLog",
-            level,
-            message,
-          });
+  if (b.runtime?.sendMessage !== undefined) {
+    void b.runtime
+      .sendMessage({
+        type: "RelayLog",
+        level,
+        message,
+      })
+      .catch(() => undefined);
+  }
+  if (b.tabs?.query !== undefined && b.tabs?.sendMessage !== undefined) {
+    void b.tabs
+      .query({})
+      .then((tabs) => {
+        for (const tab of tabs) {
+          if (typeof tab.id === "number") {
+            void b.tabs.sendMessage(tab.id, {
+              type: "RelayLog",
+              level,
+              message,
+            });
+          }
         }
-      }
-    })
-    .catch(() => undefined);
+      })
+      .catch(() => undefined);
+  }
 }
 
 function formatRelayArg(value: unknown): string {
