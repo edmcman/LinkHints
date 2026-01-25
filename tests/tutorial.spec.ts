@@ -7,7 +7,7 @@ const TUTORIAL_WAIT_MS = 1_000;
 
 const tutorialUrl = "https://lydell.github.io/LinkHints/tutorial.html";
 
-if (!process.env.BROWSER) {
+if (process.env.BROWSER === undefined) {
   throw new Error(
     "BROWSER environment variable must be set when running Playwright tests (e.g., BROWSER=firefox or BROWSER=chrome)"
   );
