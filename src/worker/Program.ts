@@ -187,6 +187,10 @@ export default class WorkerProgram {
       this.sendMessage({ type: "WorkerScriptAdded" });
       return;
     }
+    if (wrappedMessage.type === "RelayLog") {
+      log(wrappedMessage.level, "BackgroundLog", wrappedMessage.message);
+      return;
+    }
 
     if (wrappedMessage.type !== "ToWorker") {
       return;

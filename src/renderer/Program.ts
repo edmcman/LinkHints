@@ -230,6 +230,10 @@ export default class RendererProgram {
       this.sendMessage({ type: "RendererScriptAdded" });
       return;
     }
+    if (wrappedMessage.type === "RelayLog") {
+      log(wrappedMessage.level, "BackgroundLog", wrappedMessage.message);
+      return;
+    }
 
     if (wrappedMessage.type !== "ToRenderer") {
       return;

@@ -20,6 +20,11 @@ export type FromBackground =
       type: "FirefoxWorkaround";
     }
   | {
+      type: "RelayLog";
+      level: LogLevel;
+      message: string;
+    }
+  | {
       type: "ToOptions";
       message: ToOptions;
     }

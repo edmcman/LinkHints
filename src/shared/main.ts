@@ -45,6 +45,7 @@ export function log(level: LogLevel, ...args: Array<unknown>): void {
     "\n ",
     ...args
   );
+  maybeRelayLog(level, args);
 }
 
 // The main `Program` for each entrypoint modifies this property. A little ugly,
@@ -76,6 +77,78 @@ function getLogMethod(level: LogLevel): typeof console.log {
     case "debug":
       return console.debug;
   }
+}
+
+function maybeRelayLog(level: LogLevel, args: Array<unknown>): void {
+  if (PROD) {
+    return;
+  }
+  if (typeof window !== "undefined") {
+    return;
+  }
+  const b = (globalThis as unknown as { browser?: unknown }).browser as
+    | {
+        tabs?: {
+          query?: (queryInfo: Record<string, unknown>) => Promise<
+            Array<{ id?: number }>
+          >;
+          sendMessage?: (tabId: number, message: unknown) => Promise<unknown>;
+        };
+      }
+    | undefined;
+  if (b?.tabs?.query === undefined || b?.tabs?.sendMessage === undefined) {
+    return;
+  }
+  const message = args.map(formatRelayArg).join(" ");
+  void b.tabs
+    .query({})
+    .then((tabs) => {
+      for (const tab of tabs) {
+        if (typeof tab.id === "number") {
+          void b.tabs.sendMessage(tab.id, {
+            type: "RelayLog",
+            level,
+            message,
+          });
+        }
+      }
+    })
+    .catch(() => undefined);
+}
+
+function formatRelayArg(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null ||
+    value === undefined
+  ) {
+    return String(value);
+  }
+  if (value instanceof Error) {
+    return value.stack ?? value.message;
+  }
+  try {
+    return JSON.stringify(value, getSafeStringifyReplacer());
+  } catch {
+    return "[unserializable]";
+  }
+}
+
+function getSafeStringifyReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet();
+  return (_key: string, value: unknown): unknown => {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) {
+        return "[circular]";
+      }
+      seen.add(value);
+    }
+    return value;
+  };
 }
 
 /**
