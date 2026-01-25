@@ -212,6 +212,16 @@ export default class WorkerProgram {
         break;
 
       case "StartFindElements": {
+        log(
+          "log",
+          "WorkerProgram#StartFindElements",
+          message.types,
+          {
+            readyState: document.readyState,
+            url: window.location.href,
+            hasToken: this.oneTimeWindowMessageToken !== undefined,
+          }
+        );
         const run = (types: ElementTypes): void => {
           const { oneTimeWindowMessageToken } = this;
           if (oneTimeWindowMessageToken === undefined) {
@@ -791,6 +801,11 @@ export default class WorkerProgram {
     const elements = elementsWithNulls.flatMap((elementData) =>
       elementData === undefined ? [] : elementData
     );
+    log("log", "WorkerProgram#reportVisibleElements", {
+      elements: elements.length,
+      timeLeft,
+      url: window.location.href,
+    });
 
     time.start("frames");
     const frames = this.elementManager.getVisibleFrames(viewports);

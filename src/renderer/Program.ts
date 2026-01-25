@@ -147,6 +147,10 @@ export default class RendererProgram {
   }
 
   async start(): Promise<void> {
+    log("log", "RendererProgram#start", {
+      readyState: document.readyState,
+      url: window.location.href,
+    });
     // This is useful during development. If reloading the extension during
     // hints mode, the old hints will be removed as soon as the new version
     // starts.
@@ -393,6 +397,10 @@ export default class RendererProgram {
     { mixedCase }: { mixedCase: boolean }
   ): Promise<void> {
     const time = new TimeTracker();
+    log("log", "RendererProgram#render", {
+      elements: elements.length,
+      url: window.location.href,
+    });
 
     time.start("prepare");
     this.unrender();
@@ -403,6 +411,10 @@ export default class RendererProgram {
     // inserted into the DOM.
     if (document.documentElement !== null) {
       document.documentElement.append(this.container.element);
+      log("log", "RendererProgram#render container appended", {
+        connected: this.container.element.isConnected,
+        shadowChildCount: shadowRoot.childNodes.length,
+      });
       // Put the container in the top level. This is needed to stay on top of
       // popovers and modal dialogs. See:
       // https://developer.mozilla.org/en-US/docs/Glossary/Top_layer
@@ -712,6 +724,11 @@ export default class RendererProgram {
   }
 
   unrender(): void {
+    if (this.container.element.isConnected) {
+      log("log", "RendererProgram#unrender removing container", {
+        url: window.location.href,
+      });
+    }
     this.hints = [];
     this.rects.clear();
 
