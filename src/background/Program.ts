@@ -1655,23 +1655,6 @@ export default class BackgroundProgram {
           { tabId: info.tabId }
         );
 
-        // Insert renderer CSS directly into the renderer frame (MV3 will
-        // target the frameId; for MV2 this will fall back to tab-wide insert).
-        fireAndForget(
-          this.insertCssWithRetry(
-            info.tabId,
-            {
-              code: `${CSS}\n\n${this.options.values.css}`,
-              cssOrigin: "author",
-              runAt: "document_start",
-            },
-            info.frameId
-          ),
-          "BackgroundProgram#onRendererMessage",
-          "Failed to insert renderer CSS",
-          message,
-          info
-        );
         // Both uBlock Origin and Adblock Plus use `browser.tabs.insertCSS` with
         // `{ display: none !important; }` and `cssOrigin: "user"` to hide
         // elements. I’ve seen Link Hints’ container to be hidden by a
