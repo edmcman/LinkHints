@@ -507,6 +507,18 @@ export default class BackgroundProgram {
       const { [info.tabId.toString()]: perf = [] } = this.restoredTabsPerf;
       tabState.perf = perf;
       this.tabState.set(info.tabId, tabState);
+      this.sendWorkerMessage(this.makeWorkerState(tabState), {
+        tabId: info.tabId,
+        frameId: "all_frames",
+      });
+      this.sendRendererMessage(
+        {
+          type: "StateSync",
+          css: this.options.values.css,
+          logLevel: log.level,
+        },
+        { tabId: info.tabId }
+      );
     }
 
     switch (message.type) {
