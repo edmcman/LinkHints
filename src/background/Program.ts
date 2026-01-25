@@ -618,6 +618,16 @@ export default class BackgroundProgram {
         pendingFrames.collecting = Math.max(0, pendingFrames.collecting - 1);
 
         hintsState.stats.push(message.stats);
+        log("log", "BackgroundProgram#ReportVisibleElements", {
+          tabId: info.tabId,
+          frameId: info.frameId,
+          elements: message.elements.length,
+          numFrames: message.numFrames,
+          pending: {
+            collecting: pendingFrames.collecting,
+            answering: pendingFrames.answering,
+          },
+        });
 
         if (message.numFrames === 0) {
           this.maybeStartHinting(info.tabId);
@@ -786,6 +796,7 @@ export default class BackgroundProgram {
   // correct thing. This means that we never have to clear any timeouts, which
   // is very tricky to keep track of.
   setTimeout(tabId: number, duration: number): void {
+    log("log", "BackgroundProgram#setTimeout", { tabId, duration });
     setTimeout(() => {
       try {
         this.onTimeout(tabId);
@@ -796,6 +807,11 @@ export default class BackgroundProgram {
   }
 
   onTimeout(tabId: number): void {
+    const tabState = this.tabState.get(tabId);
+    log("log", "BackgroundProgram#onTimeout", {
+      tabId,
+      hintsState: tabState?.hintsState.type ?? "missing",
+    });
     this.updateBadge(tabId);
     this.maybeStartHinting(tabId);
     this.updateElements(tabId);
@@ -1319,11 +1335,16 @@ export default class BackgroundProgram {
   maybeStartHinting(tabId: number): void {
     const tabState = this.tabState.get(tabId);
     if (tabState === undefined) {
+      log("log", "BackgroundProgram#maybeStartHinting no tabState", { tabId });
       return;
     }
 
     const { hintsState } = tabState;
     if (hintsState.type !== "Collecting") {
+      log("log", "BackgroundProgram#maybeStartHinting not collecting", {
+        tabId,
+        type: hintsState.type,
+      });
       return;
     }
 
@@ -1334,11 +1355,26 @@ export default class BackgroundProgram {
       (pendingFrames.answering > 0 &&
         frameWaitDuration < t.FRAME_REPORT_TIMEOUT.value)
     ) {
+      log("log", "BackgroundProgram#maybeStartHinting waiting", {
+        tabId,
+        pending: {
+          collecting: pendingFrames.collecting,
+          answering: pendingFrames.answering,
+        },
+        frameWaitDuration,
+        FRAME_REPORT_TIMEOUT: t.FRAME_REPORT_TIMEOUT.value,
+      });
       return;
     }
 
     const { time } = hintsState;
     time.start("assign hints");
+    log("log", "BackgroundProgram#maybeStartHinting start", {
+      tabId,
+      pendingElements: hintsState.pendingElements.elements.length,
+      mode: hintsState.mode,
+      refreshing: hintsState.refreshing,
+    });
 
     const elementsWithHints: Array<ElementWithHint> = assignHints(
       hintsState.pendingElements.elements.map((element, index) => ({
@@ -1427,6 +1463,12 @@ export default class BackgroundProgram {
       },
       peeking: false,
     };
+    log("log", "BackgroundProgram#maybeStartHinting render", {
+      tabId,
+      elementsWithHints: elementsWithHints.length,
+      elementRenders: elementRenders.length,
+      highlighted: highlighted.length,
+    });
     this.sendWorkerMessage(this.makeWorkerState(tabState), {
       tabId,
       frameId: "all_frames",
@@ -1896,6 +1938,12 @@ export default class BackgroundProgram {
     );
 
     const refreshing = tabState.hintsState.type !== "Idle";
+    log("log", "BackgroundProgram#enterHintsMode", {
+      tabId,
+      mode,
+      refreshing,
+      timestamp,
+    });
 
     tabState.hintsState = {
       type: "Collecting",
