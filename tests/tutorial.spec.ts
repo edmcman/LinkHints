@@ -279,10 +279,10 @@ test("System worker restart during tutorial", async ({
   context: BrowserContext;
   browserName: string;
 }) => {
-  test(
-    browserName === "firefox",
-    "Firefox service worker restart test is flaky."
-  );
+  // test.fixme(
+  //   browserName === "firefox",
+  //   "Firefox service worker restart test is flaky."
+  // );
   test.setTimeout(120_000);
 
   // Wait for the tutorial page to load.
