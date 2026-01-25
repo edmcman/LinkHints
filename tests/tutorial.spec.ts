@@ -52,22 +52,33 @@ async function activateHints(
   page: Page,
   keystroke: string = "Alt+j"
 ): Promise<void> {
+  if (process.env.BROWSER === "firefox") {
+    await emitDump(page, `TEST_DUMP activateHints start ${keystroke}`);
+  }
   await page.waitForFunction(
     () =>
       document.querySelector("#__LinkHintsWebExt")?.shadowRoot?.innerHTML ===
-      undefined
+      undefined,
+    { timeout: 30_000 }
   );
   // UGH I want to get rid of this so bad.
   await page.waitForTimeout(200);
+  if (process.env.BROWSER === "firefox") {
+    await emitDump(page, `TEST_DUMP activateHints press ${keystroke}`);
+  }
   console.log("Pressing keystroke to activate hints:", keystroke);
   await page.keyboard.press(keystroke);
   await page.waitForFunction(
     () =>
       document.querySelector("#__LinkHintsWebExt")?.shadowRoot?.innerHTML !==
-      undefined
+      undefined,
+    { timeout: 30_000 }
   );
   // UGH I want to get rid of this so bad.
   await page.waitForTimeout(200);
+  if (process.env.BROWSER === "firefox") {
+    await emitDump(page, `TEST_DUMP activateHints done ${keystroke}`);
+  }
 }
 
 // Helper to perform step 3 actions

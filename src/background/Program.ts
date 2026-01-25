@@ -428,7 +428,7 @@ export default class BackgroundProgram {
     },
     frameId?: number
   ): Promise<void> {
-    const maxAttempts = 3;
+    const maxAttempts = 5;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         await insertCSSInTab(tabId, details, frameId);
@@ -441,8 +441,9 @@ export default class BackgroundProgram {
           attempt,
           tabId,
           frameId,
+          error: error instanceof Error ? error.message : error,
         });
-        await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt * attempt));
       }
     }
   }
