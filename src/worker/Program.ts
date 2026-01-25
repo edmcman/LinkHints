@@ -1351,10 +1351,10 @@ function suppressEvent(event: Event): void {
   // from being called.
   event.stopImmediatePropagation();
 
-  // `event.preventDefault()` doesn’t work for `accesskey="x"` in Chrome. See:
-  // https://stackoverflow.com/a/34008999/2010616
-  // Instead, temporarily remove all accesskeys.
-  if (BROWSER === "chrome") {
+  // `event.preventDefault()` doesn’t work for `accesskey="x"` in some
+  // browsers. Temporarily remove all accesskeys to prevent the browser from
+  // handling them (e.g. Alt+J triggering accesskey navigation in Firefox).
+  {
     const elements = document.querySelectorAll<HTMLElement>("[accesskey]");
     const accesskeyMap = new Map<HTMLElement, string>();
     for (const element of elements) {
@@ -1363,6 +1363,9 @@ function suppressEvent(event: Event): void {
         accesskeyMap.set(element, accesskey);
         element.removeAttribute("accesskey");
       }
+    }
+    if (accesskeyMap.size > 0) {
+      log("log", "suppressEvent removed accesskeys", { count: accesskeyMap.size });
     }
     setTimeout(() => {
       for (const [element, accesskey] of accesskeyMap) {

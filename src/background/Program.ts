@@ -261,6 +261,16 @@ export default class BackgroundProgram {
       for (const [tabIdStr, serial] of Object.entries(saved)) {
         const tabIdNum = Number(tabIdStr);
         if (openTabIds.has(tabIdNum)) {
+          const existing = this.tabState.get(tabIdNum);
+          if (existing !== undefined) {
+            // Messages arrived before restore finished; avoid overwriting live state.
+            const restored = deserializeTabState(serial);
+            if (existing.perf.length === 0 && restored.perf !== undefined) {
+              existing.perf = restored.perf;
+            }
+            continue;
+          }
+
           // Hydrate a fresh TabState; do not restore DOM-dependent hints state.
           const tabState = makeEmptyTabState(tabIdNum);
           Object.assign(tabState, deserializeTabState(serial));
