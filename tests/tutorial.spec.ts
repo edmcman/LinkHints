@@ -1,13 +1,18 @@
-import { expect as playwrightExpect } from "@playwright/test";
-import type { BrowserContext, Page } from "playwright";
-import { test, expect, startConsoleCapture, attachConsoleLogs, activateHints, snapshotHints, performStep3 } from "./fixture";
+import type { BrowserContext } from "playwright";
+
+import {
+  activateHints,
+  attachConsoleLogs,
+  expect,
+  performStep3,
+  snapshotHints,
+  startConsoleCapture,
+  test,
+} from "./fixture";
 
 const TUTORIAL_WAIT_MS = 1_000;
 
 const tutorialUrl = "https://lydell.github.io/LinkHints/tutorial.html";
-
-
-
 
 test("Run through tutorial", async ({
   context,

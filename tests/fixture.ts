@@ -11,7 +11,7 @@ const compiledDir = `compiled-${process.env.BROWSER}`;
 const extensionPath = path.resolve(__dirname, "..", compiledDir);
 
 const { test, expect } = createFixture(extensionPath);
-export { test, expect };
+export { expect, test };
 
 // Helpers for console log capture
 export function startConsoleCapture(page: Page): Array<string> {
@@ -56,7 +56,10 @@ export async function activateHints(
 }
 
 // Helper to snapshot hints
-export async function snapshotHints(page: Page, snapshotName: string): Promise<void> {
+export async function snapshotHints(
+  page: Page,
+  snapshotName: string
+): Promise<void> {
   const shadowHTML = await page.locator("#__LinkHintsWebExt").evaluate((el) => {
     if (el.shadowRoot === null) {
       throw new Error("Missing shadow DOM");
