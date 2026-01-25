@@ -272,49 +272,52 @@ test("Run through tutorial", async ({
 });
 
 // New test: open the tutorial, wait 2 minutes, then press Alt+j
-test.fixme("System worker restart during tutorial", async ({
-  context,
-  browserName,
-}: {
-  context: BrowserContext;
-  browserName: string;
-}) => {
-  test.setTimeout(300_000);
+test.fixme(
+  "System worker restart during tutorial",
+  async ({
+    context,
+    browserName: _browserName,
+  }: {
+    context: BrowserContext;
+    browserName: string;
+  }) => {
+    test.setTimeout(300_000);
 
-  // Wait for the tutorial page to load.
-  await new Promise((r) => {
-    setTimeout(r, TUTORIAL_WAIT_MS);
-  });
+    // Wait for the tutorial page to load.
+    await new Promise((r) => {
+      setTimeout(r, TUTORIAL_WAIT_MS);
+    });
 
-  const page = await context.newPage();
-  // Capture console logs for debugging if needed
-  const logs = startConsoleCapture(page);
+    const page = await context.newPage();
+    // Capture console logs for debugging if needed
+    const logs = startConsoleCapture(page);
 
-  try {
-    await page.goto(tutorialUrl);
-    await page.waitForLoadState("load");
+    try {
+      await page.goto(tutorialUrl);
+      await page.waitForLoadState("load");
 
-    expect(page.url()).toBe(tutorialUrl);
-    console.log("Tutorial page loaded");
+      expect(page.url()).toBe(tutorialUrl);
+      console.log("Tutorial page loaded");
 
-    // Wait two minutes
-    await page.waitForTimeout(120_000);
+      // Wait two minutes
+      await page.waitForTimeout(120_000);
 
-    // Use the helper to activate hints (defaults to Alt+j) and ensure UI appears
-    console.log("Activating hints after waiting 2 minutes");
-    await activateHints(page);
+      // Use the helper to activate hints (defaults to Alt+j) and ensure UI appears
+      console.log("Activating hints after waiting 2 minutes");
+      await activateHints(page);
 
-    // Snapshot the hints for verification
-    await snapshotHints(page, "shadow-wait-2min.html");
+      // Snapshot the hints for verification
+      await snapshotHints(page, "shadow-wait-2min.html");
 
-    // Attach captured logs for debugging ✅
-    await attachConsoleLogs("console-logs-system-worker-restart", logs);
-  } catch (e) {
-    console.log(
-      "All logs during system worker restart test failure:",
-      JSON.stringify(logs, null, 2)
-    );
-    await attachConsoleLogs("console-logs-system-worker-restart", logs);
-    throw e;
+      // Attach captured logs for debugging ✅
+      await attachConsoleLogs("console-logs-system-worker-restart", logs);
+    } catch (e) {
+      console.log(
+        "All logs during system worker restart test failure:",
+        JSON.stringify(logs, null, 2)
+      );
+      await attachConsoleLogs("console-logs-system-worker-restart", logs);
+      throw e;
+    }
   }
-});
+);
