@@ -4,7 +4,8 @@ import path from "path";
 import config from "../project.config";
 
 const BASE_DIR = path.join(__dirname, "..");
-const MANIFEST = path.join(BASE_DIR, config.compiled, config.manifest.output);
+const COMPILED_DIR = config.compiled;
+const MANIFEST = path.join(BASE_DIR, COMPILED_DIR, config.manifest.output);
 const MANIFEST_SRC = path.join(BASE_DIR, config.src, config.manifest.input);
 
 const SLEEP_MS = 200;
