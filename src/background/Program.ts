@@ -418,6 +418,35 @@ export default class BackgroundProgram {
       : browser.tabs.sendMessage(tabId, message, { frameId }));
   }
 
+  async insertCssWithRetry(
+    tabId: number,
+    details: {
+      code?: string;
+      files?: Array<string>;
+      cssOrigin?: "author" | "user";
+      runAt?: "document_end" | "document_idle" | "document_start";
+    },
+    frameId?: number
+  ): Promise<void> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await insertCSSInTab(tabId, details, frameId);
+        return;
+      } catch (error) {
+        if (attempt >= maxAttempts) {
+          throw error;
+        }
+        log("warn", "BackgroundProgram#insertCssWithRetry", {
+          attempt,
+          tabId,
+          frameId,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+      }
+    }
+  }
+
   // Warning: Don’t make this method async! If a new tab gets for example 3
   // events in a short time just after being opened, those three events might
   // overwrite each other. Expected execution:
@@ -1628,7 +1657,7 @@ export default class BackgroundProgram {
         // Insert renderer CSS directly into the renderer frame (MV3 will
         // target the frameId; for MV2 this will fall back to tab-wide insert).
         fireAndForget(
-          insertCSSInTab(
+          this.insertCssWithRetry(
             info.tabId,
             {
               code: `${CSS}\n\n${this.options.values.css}`,
@@ -1653,7 +1682,7 @@ export default class BackgroundProgram {
         // Also, hide the backdrop of Link Hints’ container (it is a popover),
         // for sites with styles like `::backdrop { background-color: rgba(0, 0, 0, 0.2) }`
         fireAndForget(
-          insertCSSInTab(info.tabId, {
+          this.insertCssWithRetry(info.tabId, {
             code: `${`#${CONTAINER_ID}`.repeat(
               255
             )} { display: block !important; &::backdrop { display: none !important; } }`,
