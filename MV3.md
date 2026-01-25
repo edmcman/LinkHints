@@ -7,6 +7,7 @@
 - [x] Update the manifest
 - [x] Inject into pre-existing tabs. tabs.executeScript? Do we need this with MV3?
 - [x] Add listeners synchronously at top level in service worker
+- [ ] Fix website distortion problems (e.g., missing menu in edmcman.github.io)
 
 ## Minor
 
