@@ -7,7 +7,13 @@ const TUTORIAL_WAIT_MS = 1_000;
 
 const tutorialUrl = "https://lydell.github.io/LinkHints/tutorial.html";
 
-const extensionPath = path.resolve(__dirname, "..", "compiled");
+if (!process.env.BROWSER) {
+  throw new Error(
+    "BROWSER environment variable must be set when running Playwright tests (e.g., BROWSER=firefox or BROWSER=chrome)"
+  );
+}
+const compiledDir = `compiled-${process.env.BROWSER}`;
+const extensionPath = path.resolve(__dirname, "..", compiledDir);
 
 const { test, expect } = createFixture(extensionPath);
 
