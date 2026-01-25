@@ -272,7 +272,7 @@ test("Run through tutorial", async ({
 });
 
 // New test: open the tutorial, wait 2 minutes, then press Alt+j
-test.fixme(
+test.fail(
   "System worker restart during tutorial",
   async ({
     context,
