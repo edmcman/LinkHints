@@ -132,32 +132,6 @@ async function attachConsoleLogs(
   });
 }
 
-async function clearBackgroundLogs(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    try {
-      await browser.storage.local.set({ debugLogs: [] });
-    } catch {
-      // ignore
-    }
-  });
-}
-
-async function writeBackgroundLogs(
-  page: Page,
-  outputPath: string
-): Promise<void> {
-  const logs = await page.evaluate(async () => {
-    try {
-      const result = await browser.storage.local.get("debugLogs");
-      const maybeLogs = (result as { debugLogs?: unknown }).debugLogs;
-      return Array.isArray(maybeLogs) ? maybeLogs : [];
-    } catch {
-      return ["<failed to read debugLogs>"];
-    }
-  });
-  fs.writeFileSync(outputPath, logs.join("\n"), "utf8");
-}
-
 test("Run through tutorial", async ({
   context,
   browserName,
@@ -165,7 +139,6 @@ test("Run through tutorial", async ({
   context: BrowserContext;
   browserName: string;
 }) => {
-  let page: Page | undefined;
   let logs: Array<string> = [];
   try {
     attachServiceWorkerLogs(
@@ -180,14 +153,13 @@ test("Run through tutorial", async ({
     });
 
     // Now manually open the tutorial page
-    page = await context.newPage();
+    const page = await context.newPage();
 
     // Capture console logs from the page (including content scripts)
     logs = startConsoleCapture(page);
 
     await page.goto(tutorialUrl);
     await page.waitForLoadState("load");
-    await clearBackgroundLogs(page);
 
     expect(page.url()).toBe(tutorialUrl);
     console.log("Tutorial page loaded");
@@ -418,13 +390,6 @@ test("Run through tutorial", async ({
     console.log("All logs during test failure:", JSON.stringify(logs, null, 2));
     await attachConsoleLogs("console-logs", logs);
     throw e;
-  } finally {
-    if (page !== undefined) {
-      await writeBackgroundLogs(
-        page,
-        test.info().outputPath("background-storage.log")
-      );
-    }
   }
 });
 
@@ -434,7 +399,6 @@ test("System worker restart during tutorial", async ({
 }: {
   context: BrowserContext;
 }) => {
-  let page: Page | undefined;
   attachServiceWorkerLogs(
     context,
     test.info().outputPath("background-console.log")
@@ -446,14 +410,13 @@ test("System worker restart during tutorial", async ({
     setTimeout(r, TUTORIAL_WAIT_MS);
   });
 
-  page = await context.newPage();
+  const page = await context.newPage();
   // Capture console logs for debugging if needed
   const logs = startConsoleCapture(page);
 
   try {
     await page.goto(tutorialUrl);
     await page.waitForLoadState("load");
-    await clearBackgroundLogs(page);
 
     expect(page.url()).toBe(tutorialUrl);
     console.log("Tutorial page loaded");
@@ -477,12 +440,5 @@ test("System worker restart during tutorial", async ({
     );
     await attachConsoleLogs("console-logs-system-worker-restart", logs);
     throw e;
-  } finally {
-    if (page !== undefined) {
-      await writeBackgroundLogs(
-        page,
-        test.info().outputPath("background-storage.log")
-      );
-    }
   }
 });

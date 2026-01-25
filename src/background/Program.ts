@@ -34,12 +34,10 @@ import {
   decode,
   fireAndForget,
   isMixedCase,
-  LogLevel,
   log,
   makeRandomToken,
   partition,
   Resets,
-  setLogRelay,
   splitEnteredText,
 } from "../shared/main";
 import type {
@@ -198,14 +196,10 @@ export const t = {
 
 export const tMeta = tweakable("Background", t);
 
-const LOG_BUFFER_LIMIT = 2000;
-
 export default class BackgroundProgram {
   options: OptionsData;
 
   tabState = new Map<number, TabState>();
-  relayTabIds = new Set<number>();
-  logBuffer: Array<string> = [];
 
   restoredTabsPerf: TabsPerf = {};
 
@@ -246,7 +240,6 @@ export default class BackgroundProgram {
 
   async start(): Promise<void> {
     log("log", "BackgroundProgram#start", BROWSER, PROD);
-    setLogRelay(this.relayLog.bind(this));
 
     try {
       await this.updateOptions({ isInitial: true });
@@ -356,7 +349,6 @@ export default class BackgroundProgram {
   stop(): void {
     log("log", "BackgroundProgram#stop");
     this.resets.reset();
-    setLogRelay(undefined);
   }
 
   sendWorkerMessage(
@@ -426,29 +418,6 @@ export default class BackgroundProgram {
       : browser.tabs.sendMessage(tabId, message, { frameId }));
   }
 
-  relayLog(level: LogLevel, args: Array<unknown>): void {
-    const message = formatRelayLogLine(level, args);
-    this.logBuffer.push(message);
-    if (this.logBuffer.length > LOG_BUFFER_LIMIT) {
-      this.logBuffer.splice(0, this.logBuffer.length - LOG_BUFFER_LIMIT);
-    }
-    fireAndForget(
-      browser.storage.local.set({ debugLogs: this.logBuffer }),
-      "BackgroundProgram#relayLog->storage",
-      { level, message }
-    );
-    for (const tabId of this.relayTabIds) {
-      fireAndForget(
-        this.sendContentMessage(
-          { type: "RelayLog", level, message },
-          { tabId, frameId: "all_frames" }
-        ),
-        "BackgroundProgram#relayLog",
-        { tabId, level, message }
-      );
-    }
-  }
-
   // Warning: Don’t make this method async! If a new tab gets for example 3
   // events in a short time just after being opened, those three events might
   // overwrite each other. Expected execution:
@@ -480,9 +449,6 @@ export default class BackgroundProgram {
     // (which isn’t associated with a tab). The worker script can even load in
     // an `about:blank` frame somewhere when hovering the browserAction!
     const info = makeMessageInfo(sender);
-    if (info !== undefined) {
-      this.relayTabIds.add(info.tabId);
-    }
 
     const tabStateRaw =
       info === undefined ? undefined : this.tabState.get(info.tabId);
@@ -3081,44 +3047,4 @@ function mergeElements(
 function matchesText(passedText: string, words: Array<string>): boolean {
   const text = passedText.toLowerCase();
   return words.every((word) => text.includes(word));
-}
-
-function formatRelayLogLine(level: LogLevel, args: Array<unknown>): string {
-  const timestamp = new Date().toISOString();
-  return `[${timestamp}] [${level}] ${args.map(formatRelayArg).join(" ")}`;
-}
-
-function formatRelayArg(value: unknown): string {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    value === null ||
-    value === undefined
-  ) {
-    return String(value);
-  }
-  if (value instanceof Error) {
-    return value.stack ?? value.message;
-  }
-  try {
-    return JSON.stringify(value, getSafeStringifyReplacer());
-  } catch {
-    return "[unserializable]";
-  }
-}
-
-function getSafeStringifyReplacer(): (key: string, value: unknown) => unknown {
-  const seen = new WeakSet();
-  return (_key: string, value: unknown): unknown => {
-    if (typeof value === "object" && value !== null) {
-      if (seen.has(value)) {
-        return "[circular]";
-      }
-      seen.add(value);
-    }
-    return value;
-  };
 }
