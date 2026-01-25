@@ -160,6 +160,8 @@ jobs:
 
       - name: Run Playwright tests
         run: xvfb-run -a npm run test:playwright:${{ matrix.browser }}
+        env:
+          DEBUG: pw:api,pw:browser,pw:page
 
       - name: Fix apt cache perms for saving
         if: always()
