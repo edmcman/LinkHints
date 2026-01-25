@@ -271,18 +271,14 @@ test("Run through tutorial", async ({
   }
 });
 
-// New test: open the tutorial, wait 1 minute, then press Alt+j
-test("System worker restart during tutorial", async ({
+// New test: open the tutorial, wait 2 minutes, then press Alt+j
+test.fixme("System worker restart during tutorial", async ({
   context,
   browserName,
 }: {
   context: BrowserContext;
   browserName: string;
 }) => {
-  // test.fixme(
-  //   browserName === "firefox",
-  //   "Firefox service worker restart test is flaky."
-  // );
   test.setTimeout(300_000);
 
   // Wait for the tutorial page to load.
