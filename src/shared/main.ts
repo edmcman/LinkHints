@@ -80,9 +80,6 @@ function getLogMethod(level: LogLevel): typeof console.log {
 }
 
 function maybeRelayLog(level: LogLevel, args: Array<unknown>): void {
-  if (PROD) {
-    return;
-  }
   if (typeof window !== "undefined") {
     return;
   }
