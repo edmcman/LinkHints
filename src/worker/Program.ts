@@ -136,12 +136,21 @@ export default class WorkerProgram {
   }
 
   sendMessage(message: FromWorker): void {
-    log("log", "WorkerProgram#sendMessage", message.type, message);
-    fireAndForget(
-      browser.runtime.sendMessage(wrapMessage(message)).then(() => undefined),
-      "WorkerProgram#sendMessage",
-      message
-    );
+    const start = Date.now();
+    log("log", "WorkerProgram#sendMessage start", message.type, message);
+    const p = browser.runtime
+      .sendMessage(wrapMessage(message))
+      .then(() => {
+        log("log", "WorkerProgram#sendMessage ack", message.type, {
+          elapsed: Date.now() - start,
+        });
+      })
+      .catch((err) => {
+        log("error", "WorkerProgram#sendMessage error", message.type, String(err));
+        throw err;
+      })
+      .then(() => undefined);
+    fireAndForget(p, "WorkerProgram#sendMessage", message);
   }
 
   addWindowListeners(): void {
@@ -724,7 +733,14 @@ export default class WorkerProgram {
       return;
     }
 
+    log("log", "WorkerProgram#onMutation start", {
+      records: records.length,
+      url: window.location.href,
+      time: Date.now(),
+    });
+
     const newElements = this.getAllNewElements(records);
+    log("log", "WorkerProgram#onMutation found", { newElements: newElements.length });
     updateElementsWithEqualOnes(current, newElements);
 
     // In addition to the "UpdateElements" polling, update as soon as possible
@@ -734,6 +750,7 @@ export default class WorkerProgram {
     // Just after entering hints mode a mutation _always_ happens – inserting
     // the div with the hints. Don’t let that trigger an update.
     if (!(newElements.length === 1 && newElements[0].id === CONTAINER_ID)) {
+      log("log", "WorkerProgram#onMutation updatingVisibleElements");
       this.updateVisibleElements({
         current,
         // Skip updating child frames since we only know that things changed in
@@ -741,9 +758,19 @@ export default class WorkerProgram {
         oneTimeWindowMessageToken: undefined,
       });
     }
+
+    log("log", "WorkerProgram#onMutation end", { time: Date.now() });
   }
 
   onPageHide(event: Event): void {
+    log("log", "WorkerProgram#onPageHide start", {
+      isTrusted: event.isTrusted,
+      location: window.location.href,
+      top: window.top === window,
+      time: Date.now(),
+      event,
+    });
+
     if (!event.isTrusted) {
       log("log", "WorkerProgram#onPageHide", "ignoring untrusted event", event);
       return;
@@ -751,11 +778,22 @@ export default class WorkerProgram {
 
     if (window.top === window) {
       // The top page is about to be “die.”
+      log("log", "WorkerProgram#onPageHide", "sending TopPageHide");
       this.sendMessage({ type: "TopPageHide" });
     }
+
+    log("log", "WorkerProgram#onPageHide end", { time: Date.now() });
   }
 
   onPageShow(event: PageTransitionEvent): void {
+    log("log", "WorkerProgram#onPageShow start", {
+      isTrusted: event.isTrusted,
+      persisted: event.persisted,
+      location: window.location.href,
+      time: Date.now(),
+      event,
+    });
+
     if (!event.isTrusted) {
       log("log", "WorkerProgram#onPageShow", "ignoring untrusted event", event);
       return;
@@ -763,8 +801,11 @@ export default class WorkerProgram {
 
     if (event.persisted) {
       // We have returned to the page via the back/forward buttons.
+      log("log", "WorkerProgram#onPageShow", "sending PersistedPageShow");
       this.sendMessage({ type: "PersistedPageShow" });
     }
+
+    log("log", "WorkerProgram#onPageShow end", { time: Date.now() });
   }
 
   getAllNewElements(records: Array<MutationRecord>): Array<HTMLElement> {
@@ -857,6 +898,14 @@ export default class WorkerProgram {
     current: CurrentElements;
     oneTimeWindowMessageToken: string | undefined;
   }): void {
+    log("log", "WorkerProgram#updateVisibleElements start", {
+      elementsCount: current.elements.length,
+      framesCount: current.frames.length,
+      token: oneTimeWindowMessageToken,
+      url: window.location.href,
+      time: Date.now(),
+    });
+
     const [elements, timeLeft]: [Array<VisibleElement | undefined>, number] =
       this.elementManager.getVisibleElements(
         current.types,
@@ -901,6 +950,13 @@ export default class WorkerProgram {
     const elementReports = makeElementReports(elements, {
       maxDuration: timeLeft,
       prefix: "WorkerProgram#updateVisibleElements",
+    });
+
+    log("log", "WorkerProgram#updateVisibleElements result", {
+      elementReports: elementReports.length,
+      rects: rects.length,
+      timeLeft,
+      time: Date.now(),
     });
 
     this.sendMessage({
