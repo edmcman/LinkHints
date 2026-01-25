@@ -91,13 +91,13 @@ jobs:
         run: rm -f dist-*/key.pem || true
 
       - name: Upload Chrome artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         with:
           name: link-hints-chrome
           path: dist-chrome/
 
       - name: Upload Firefox artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         with:
           name: link-hints-firefox
           path: dist-firefox/
