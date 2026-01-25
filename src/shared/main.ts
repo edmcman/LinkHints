@@ -32,6 +32,7 @@ export const DEFAULT_LOG_LEVEL: LogLevel = PROD
   : decode(LogLevel, DEFAULT_LOG_LEVEL_CONFIG);
 
 export function log(level: LogLevel, ...args: Array<unknown>): void {
+  maybeRelayLog(level, args);
   if (LOG_LEVELS[level] > LOG_LEVELS[log.level]) {
     return;
   }
@@ -45,7 +46,6 @@ export function log(level: LogLevel, ...args: Array<unknown>): void {
     "\n ",
     ...args
   );
-  maybeRelayLog(level, args);
 }
 
 // The main `Program` for each entrypoint modifies this property. A little ugly,
