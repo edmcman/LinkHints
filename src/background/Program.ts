@@ -206,6 +206,13 @@ export default class BackgroundProgram {
 
   resets = new Resets();
 
+  startupRestorePending = false;
+
+  startupQueue: Array<{
+    message: ToBackground;
+    sender: browser.runtime.MessageSender;
+  }> = [];
+
   constructor() {
     const mac = false;
     const defaults = getDefaults({ mac });
@@ -254,6 +261,7 @@ export default class BackgroundProgram {
     const tabs = await browser.tabs.query({});
 
     // Restore stored tab states for currently open tabs.
+    this.startupRestorePending = true;
     try {
       const saved = await restoreAllTabStates();
       const openTabIds = new Set<number>(tabs.map((tab) => tab.id as number));
@@ -276,6 +284,9 @@ export default class BackgroundProgram {
       }
     } catch (error) {
       log("error", "BackgroundProgram#start->restoreAllTabStates", error);
+    } finally {
+      this.startupRestorePending = false;
+      this.drainStartupQueue();
     }
 
     // See addEarlyListeners() also.
@@ -441,6 +452,44 @@ export default class BackgroundProgram {
   // each other. An overwrite can cause us to lose `tabState.isOptionsPage`,
   // breaking shortcuts customization.
   onMessage(
+    message: ToBackground,
+    sender: browser.runtime.MessageSender
+  ): void {
+    if (this.startupRestorePending) {
+      this.enqueueStartupMessage(message, sender);
+      return;
+    }
+    this.processMessage(message, sender);
+  }
+
+  private enqueueStartupMessage(
+    message: ToBackground,
+    sender: browser.runtime.MessageSender
+  ): void {
+    this.startupQueue.push({ message, sender });
+    if (this.startupQueue.length === 200) {
+      log("warn", "BackgroundProgram#startupQueueLarge", {
+        length: this.startupQueue.length,
+      });
+    }
+  }
+
+  private drainStartupQueue(): void {
+    if (this.startupQueue.length === 0) {
+      return;
+    }
+    log("log", "BackgroundProgram#drainStartupQueue", {
+      length: this.startupQueue.length,
+    });
+    while (this.startupQueue.length > 0) {
+      const next = this.startupQueue.shift();
+      if (next !== undefined) {
+        this.processMessage(next.message, next.sender);
+      }
+    }
+  }
+
+  private processMessage(
     message: ToBackground,
     sender: browser.runtime.MessageSender
   ): void {
