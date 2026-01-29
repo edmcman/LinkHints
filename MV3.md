@@ -1,5 +1,6 @@
 # MV3 Checklist
 
+- [ ] cnn.com problem reported by Michael Kutnetsov.  Hints don't appear. Seems related to google pop-over.
 - [ ] service worker restart test
 - [x] Serialize storage
 - [x] Browser actions
