@@ -22,6 +22,7 @@ import {
   getLabels,
   getTextRects,
   getViewport,
+  isExtensionContextValid,
   LAST_NON_WHITESPACE,
   log,
   NON_WHITESPACE,
@@ -587,9 +588,7 @@ export default class WorkerProgram {
   // (at least for now) the extension shortcuts always do their thing (making it
   // impossible to trigger a site shortcut using the same keys).
   onKeydown(event: KeyboardEvent): void {
-    try {
-      browser.runtime.getManifest();
-    } catch {
+    if (!isExtensionContextValid()) {
       this.stop();
       return;
     }

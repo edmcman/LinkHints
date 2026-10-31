@@ -12,15 +12,22 @@ import {
 // ElementManager might not get the same random number.
 export const CONTAINER_ID = `__${META_SLUG}WebExt`;
 
+export function isExtensionContextValid(): boolean {
+  try {
+    browser.runtime.getManifest();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function onInvalidated(
   cleanup: () => void,
   reconnect: () => void
 ): void {
   const delays = [100, 400, 1500];
   function check(): void {
-    try {
-      browser.runtime.getManifest();
-    } catch {
+    if (!isExtensionContextValid()) {
       cleanup();
       return;
     }

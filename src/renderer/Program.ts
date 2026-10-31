@@ -153,6 +153,7 @@ export default class RendererProgram {
     // hints mode, the old hints will be removed as soon as the new version
     // starts.
     this.unrender();
+    this.removeStaleContainers();
 
     this.resets.add(
       addListener(
@@ -736,12 +737,16 @@ export default class RendererProgram {
     this.container.shadowRoot.replaceChildren();
     this.container.resets.reset();
     this.container.intersectionObserver.disconnect();
+  }
 
-    // In theory there can be several left-over elements with `id=CONTAINER_ID`.
-    // `querySelectorAll` finds them all.
-    const containers = document.querySelectorAll(`#${CONTAINER_ID}`);
-    for (const container of containers) {
-      container.remove();
+  // In theory there can be several left-over elements with `id=CONTAINER_ID`
+  // from earlier instances. Only done on start: an old instance stopping after
+  // a reload must not remove the container of the new instance.
+  removeStaleContainers(): void {
+    for (const container of document.querySelectorAll(`#${CONTAINER_ID}`)) {
+      if (container !== this.container.element) {
+        container.remove();
+      }
     }
   }
 

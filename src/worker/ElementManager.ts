@@ -13,6 +13,7 @@ import {
   getElementsFromPoint,
   getLabels,
   getVisibleBox,
+  isExtensionContextValid,
   LAST_NON_WHITESPACE,
   log,
   NON_WHITESPACE,
@@ -387,7 +388,7 @@ export default class ElementManager {
         addEventListener(
           window,
           INJECTED_READY_EVENT,
-          this.configureInjected.bind(this),
+          this.onInjectedReady.bind(this),
           "ElementManager#onInjectedReady"
         )
       );
@@ -667,6 +668,15 @@ export default class ElementManager {
 
   sendInjectedEvent(eventName: string): void {
     document.dispatchEvent(new CustomEvent(eventName));
+  }
+
+  onInjectedReady(): void {
+    // After an extension reload this orphaned instance can outlive the new one.
+    // Answering a newer injected.ts would hand it our secret prefix, which our
+    // late `stop()` then uses to reset it.
+    if (isExtensionContextValid()) {
+      this.configureInjected();
+    }
   }
 
   configureInjected(): void {

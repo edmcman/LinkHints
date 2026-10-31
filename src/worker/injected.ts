@@ -149,6 +149,8 @@ export const injected = (): (() => void) => {
 
       const { fnMap } = this;
 
+      let active = true;
+
       const fn = dynamicallyNamedFunction(
         originalFn.name,
         hook === undefined
@@ -158,6 +160,10 @@ export const injected = (): (() => void) => {
               // not the overriding function.
               apply(originalFn, apply(mapGet, fnMap, [that]) ?? that, args)
           : (that: unknown, ...args: Array<never>): unknown => {
+              if (!active) {
+                return apply(originalFn, that, args);
+              }
+
               let prehookData = undefined;
               if (prehook !== undefined) {
                 try {
@@ -223,7 +229,13 @@ export const injected = (): (() => void) => {
       // Finally override the method with the created function.
       Reflect.defineProperty(obj, name, newDescriptor);
       this.resetFns.push(() => {
-        Reflect.defineProperty(obj, name, descriptor);
+        active = false;
+        // A newer instance of this script (after an extension reload) may have
+        // wrapped our wrapper. Restoring `descriptor` then would remove its hook
+        // too, so only restore if ours is still on top.
+        if (Reflect.getOwnPropertyDescriptor(obj, name)?.[prop] === fn) {
+          Reflect.defineProperty(obj, name, descriptor);
+        }
       });
     }
 
