@@ -26,6 +26,7 @@
   "exclude": [
     "compiled*",
     "html",
-    "playwright-report"
+    "playwright-report",
+    "web-ext-config.mjs"
   ]
 }

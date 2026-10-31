@@ -15,3 +15,5 @@ export function main(): void {
   (globalThis as typeof globalThis & { program?: typeof program }).program =
     program;
 }
+
+main();

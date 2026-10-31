@@ -68,13 +68,8 @@ export default {
   },
   serviceWorkerEnabled: serviceWorkerEnabled(currentBrowser),
   injectedAsContentScript: injectedAsContentScript(currentBrowser),
-  needsPolyfill: needsPolyfill(currentBrowser),
-  polyfill: {
-    input: "../node_modules/webextension-polyfill/dist/browser-polyfill.min.js",
-    output: "browser-polyfill.js",
-  },
   background: {
-    input: "background/entry.ts",
+    input: "background/main.ts",
     output: "background.js",
   },
   worker: {
@@ -197,17 +192,6 @@ function serviceWorkerEnabled(browser: Browser | undefined): boolean {
     case "firefox":
     case undefined:
       return false;
-  }
-}
-
-function needsPolyfill(browser: Browser | undefined): boolean {
-  switch (browser) {
-    case "firefox":
-      return false;
-
-    case "chrome":
-    case undefined:
-      return true;
   }
 }
 

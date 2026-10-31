@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 declare type Browser = "chrome" | "firefox";
 
@@ -74,6 +75,28 @@ declare namespace browser.tabs {
   export interface Tab {
     vivExtData?: unknown;
   }
+}
+
+declare namespace browser.scripting {
+  type Target = {
+    tabId: number;
+    allFrames?: boolean;
+    frameIds?: Array<number>;
+  };
+
+  function executeScript(details: {
+    target: Target;
+    files?: Array<string>;
+    func?: () => unknown;
+    world?: "ISOLATED" | "MAIN";
+    injectImmediately?: boolean;
+  }): Promise<unknown>;
+
+  function insertCSS(details: {
+    target: Target;
+    css: string;
+    origin?: "AUTHOR" | "USER";
+  }): Promise<void>;
 }
 
 interface ShadowRoot {

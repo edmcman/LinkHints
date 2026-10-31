@@ -29,7 +29,7 @@ async function savedState(
   background: Page | Worker,
   url: string
 ): Promise<SavedState | undefined> {
-  return background.evaluate(async (pageUrl) => {
+  return (background as Worker).evaluate(async (pageUrl: string) => {
     const api = globalThis as unknown as {
       chrome: {
         tabs: {
@@ -200,8 +200,8 @@ test("reinjecting content scripts does not duplicate hints", async ({
       const [tab] = await api.chrome.tabs.query({ url: pageUrl });
       for (const [files, world, allFrames] of [
         [["injected.js"], "MAIN", true],
-        [["browser-polyfill.js", "worker.js"], undefined, true],
-        [["browser-polyfill.js", "renderer.js"], undefined, false],
+        [["worker.js"], undefined, true],
+        [["renderer.js"], undefined, false],
       ] as Array<[Array<string>, "MAIN" | undefined, boolean]>) {
         await api.chrome.scripting.executeScript({
           target: { tabId: tab.id, allFrames },

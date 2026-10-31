@@ -18,25 +18,23 @@
     "web-ext": "sucrase-node node_modules/.bin/web-ext",
     "test:playwright:firefox": "cross-env LINKHINTS_DEV=1 npm run build:firefox && xvfb-run -a cross-env BROWSER=firefox playwright test --project=firefox",
     "test:playwright:chromium": "cross-env LINKHINTS_DEV=1 npm run build:chrome && xvfb-run -a cross-env BROWSER=chrome playwright test --project=chromium",
-    "test": "npm run build:all && eslint . --report-unused-disable-directives && prettier --check . && tsc",
-    "test-manual": "run-pty --auto-exit % npm run build:all % eslint . --report-unused-disable-directives % prettier --check . % tsc"
+    "test:playwright:production:chromium": "cross-env BROWSER=chrome LINKHINTS_DEV=0 npm run build:helper && xvfb-run -a cross-env BROWSER=chrome playwright test tests/production.spec.ts --project=chromium",
+    "test": "run-pty --auto-exit % npm run build:all % eslint . --report-unused-disable-directives % prettier --check . % tsc"
   },
   "dependencies": {
     "n-ary-huffman": "4.0.0",
     "preact": "10.11.3",
     "preact-shadow-root": "1.0.2",
-    "tiny-decoders": "7.0.1",
-    "webextension-polyfill": "0.10.0"
+    "tiny-decoders": "7.0.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
+    "@playwright/test": "^1.64.1",
     "@rollup/plugin-commonjs": "24.0.0",
     "@rollup/plugin-node-resolve": "15.0.1",
     "@rollup/plugin-replace": "5.0.2",
     "@rollup/plugin-sucrase": "5.0.1",
     "@types/cross-spawn": "6.0.2",
     "@types/firefox-webext-browser": "94.0.1",
-    "@types/webextension-polyfill": "^0.12.4",
     "@types/yazl": "2.4.2",
     "@typescript-eslint/eslint-plugin": "5.48.1",
     "@typescript-eslint/parser": "5.48.1",
@@ -49,7 +47,7 @@
     "js-tokens": "8.0.0",
     "minifycss": "1.0.1",
     "optional-require": "1.1.8",
-    "playwright": "^1.57.0",
+    "playwright": "^1.64.1",
     "playwright-webextext": "^0.0.4",
     "preact-render-to-string": "5.2.6",
     "prettier": "2.8.3",

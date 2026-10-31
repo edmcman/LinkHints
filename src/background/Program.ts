@@ -2,13 +2,6 @@ import huffman from "n-ary-huffman";
 
 import iconsChecksum from "../icons/checksum";
 import {
-  executeScriptInTab,
-  getActionApi,
-  getActionDefaultIcons,
-  getChromiumVariant,
-  insertCSSInTab,
-} from "../shared/apiCompatibility";
-import {
   elementKey,
   ElementRender,
   ElementReport,
@@ -40,6 +33,7 @@ import {
   splitEnteredText,
 } from "../shared/main";
 import type {
+  ChromiumVariant,
   FromBackground,
   FromOptions,
   FromPopup,
@@ -415,7 +409,7 @@ export default class BackgroundProgram {
     }
 
     fireAndForget(
-      getActionApi().setBadgeBackgroundColor({ color: COLOR_BADGE }),
+      browser.action.setBadgeBackgroundColor({ color: COLOR_BADGE }),
       "BackgroundProgram#start->setBadgeBackgroundColor"
     );
 
@@ -1681,7 +1675,7 @@ export default class BackgroundProgram {
           { tabId: info.tabId }
         );
 
-        // Both uBlock Origin and Adblock Plus use `browser.tabs.insertCSS` with
+        // Both uBlock Origin and Adblock Plus use `browser.scripting.insertCSS` with
         // `{ display: none !important; }` and `cssOrigin: "user"` to hide
         // elements. I’ve seen Link Hints’ container to be hidden by a
         // `[style*="animation:"]` filter. This makes sure that the container
@@ -1692,12 +1686,12 @@ export default class BackgroundProgram {
         // Also, hide the backdrop of Link Hints’ container (it is a popover),
         // for sites with styles like `::backdrop { background-color: rgba(0, 0, 0, 0.2) }`
         fireAndForget(
-          insertCSSInTab(info.tabId, {
-            code: `${`#${CONTAINER_ID}`.repeat(
+          browser.scripting.insertCSS({
+            target: { tabId: info.tabId, frameIds: [TOP_FRAME_ID] },
+            css: `${`#${CONTAINER_ID}`.repeat(
               255
             )} { display: block !important; &::backdrop { display: none !important; } }`,
-            cssOrigin: "user",
-            runAt: "document_start",
+            origin: "USER",
           }),
           "BackgroundProgram#onRendererMessage",
           "Failed to insert adblock workaround CSS",
@@ -2199,7 +2193,11 @@ export default class BackgroundProgram {
     // Check if we’re allowed to execute content scripts on this page.
     if (!enabled) {
       try {
-        await executeScriptInTab(tabId, { code: "", runAt: "document_start" });
+        await browser.scripting.executeScript({
+          target: { tabId },
+          func: () => undefined,
+          injectImmediately: true,
+        });
         enabled = true;
       } catch {
         enabled = false;
@@ -2209,7 +2207,7 @@ export default class BackgroundProgram {
     const type: IconType = enabled ? "normal" : "disabled";
     const icons = getIcons(type);
     log("log", "BackgroundProgram#updateIcon", tabId, type);
-    await getActionApi().setIcon({ path: icons, tabId });
+    await browser.action.setIcon({ path: icons, tabId });
   }
 
   updateBadge(tabId: number): void {
@@ -2221,7 +2219,7 @@ export default class BackgroundProgram {
     const { hintsState } = tabState;
 
     fireAndForget(
-      getActionApi().setBadgeText({
+      browser.action.setBadgeText({
         text: getBadgeText(hintsState),
         tabId,
       }),
@@ -2733,11 +2731,19 @@ async function openNewWindows(urls: Array<string>): Promise<void> {
   }
 }
 
+async function getChromiumVariant(): Promise<ChromiumVariant> {
+  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+  return tabs[0]?.vivExtData !== undefined ? "vivaldi" : "chrome";
+}
+
 type IconType = "disabled" | "normal";
 
 function getIcons(type: IconType): Record<string, string> {
   const manifest = browser.runtime.getManifest();
-  const iconEntries = getActionDefaultIcons(manifest);
+  const iconEntries = manifest.action?.default_icon;
+  if (iconEntries === undefined) {
+    throw new Error("Missing default_icon for extension action");
+  }
   return Object.fromEntries(
     Object.entries(iconEntries).flatMap(([key, value]) => {
       if (typeof value === "string") {

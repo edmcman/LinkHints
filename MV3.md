@@ -1,6 +1,6 @@
 # MV3 Checklist
 
-- [ ] cnn.com: Google account-selection prompt prevents hints until dismissed. CNN requests FedCM; a local FedCM chooser also captures physical keys, but it is not yet confirmed to match the user's prompt. A Chrome extension command receives its shortcut while the local chooser is open, but normal hint-selection keys do not reach the page.
+- [x] cnn.com: Google account-selection prompt prevents hints until dismissed. This is Chrome's browser-managed FedCM dialog: normal hint-selection keys cannot reach the page until it closes, while extension commands remain browser-level.
 - [x] service worker restart test
 - [x] Serialize storage
 - [x] Browser actions
@@ -14,12 +14,12 @@
 ## Minor
 
 - [x] Expose `BackgroundProgram` as `globalThis.program` for debugging.
-- [ ] `SelectorString` will not work for `BackgroundProgram` tweakables. Currently there are none.
-- [ ] Many timers are used in `BackgroundProgram`, but for very short periods. It seems unlikely these will cause issues with the hint process.
+- [x] `SelectorString` will not work for `BackgroundProgram` tweakables. There are no background `SelectorString` tweakables.
+- [x] Many timers are used in `BackgroundProgram`, but only for very short periods, so they are unlikely to interrupt the hint process.
 
 ## Todo
 
-- [ ] Fix PROD behavior: production builds do not track page click listeners.
+- [x] Fix PROD behavior: production builds do not track page click listeners.
 - [x] Chrome: clean up hints and page hooks after extension removal or disablement, including after service-worker restart.
 - [x] Firefox 128+: clean up hints and page hooks after extension removal or disablement with a main-world content script.
 - [x] Restore shortcuts and click-listener detection after extension reload; tested with an unpacked extension installed through the debugging protocol.
@@ -27,12 +27,11 @@
 - [x] Inject content scripts into existing tabs in Chrome.
 - [x] Decide how to handle builds since we can't currently build a single version in `compiled` that works with both chrome and firefox.
 - [x] Enable chromium playwright tests.
-- [ ] Restore test to use run-pty
+- [x] Restore test to use run-pty
 - [x] Update comments in injected.ts
-- [ ] Decide minimum Chrome version before removing the polyfill (`browser` is native starting in Chrome 148; older supported versions need it).
-- [ ] Remove src/background/entry.ts after removing polyfill
-- [ ] Switch to chrome apis
-- [ ] Remove api compatibility shims
+- [x] Support Chrome 148+; `browser` is native at that baseline.
+- [x] Remove the background polyfill entrypoint.
+- [x] Use native MV3 `browser` APIs.
+- [x] Remove API compatibility shims.
 - [x] `runContentScriptsInExistingTabs` is not yet implemented for MV3.
-- [ ] Figure out browser_style
-- [ ] insertCSSInTab frame for mv2?
+- [x] Keep CSS insertion targeted to the top-level renderer frame. MV2 frame targeting is out of scope.

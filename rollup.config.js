@@ -61,7 +61,6 @@ const main = [
     css: [config.optionsCss.output],
   }),
   css(config.optionsCss),
-  config.needsPolyfill ? copy(config.polyfill) : undefined,
 ].flatMap((entry) =>
   entry === undefined
     ? []
@@ -157,7 +156,6 @@ function js({ input, output }) {
       name: path.basename(output, path.extname(output)).replace(/-/g, "_"),
       sourcemap: !PROD,
       externalLiveBindings: false,
-      // Needed for polyfill in background
       inlineDynamicImports: true,
     },
     plugins: [
@@ -249,9 +247,6 @@ function html(files) {
     output: files.html,
     data: {
       title: files.title,
-      polyfill: config.needsPolyfill
-        ? path.relative(path.dirname(files.html), config.polyfill.output)
-        : undefined,
       js: files.js.map((src) => path.relative(path.dirname(files.html), src)),
       css: files.css.map((href) =>
         path.relative(path.dirname(files.html), href)

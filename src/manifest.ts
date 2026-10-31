@@ -12,6 +12,7 @@ export default (): string =>
     author: config.meta.author,
     description: config.meta.description,
     homepage_url: config.meta.homepage,
+    minimum_chrome_version: config.browser === "chrome" ? "148" : undefined,
     browser_specific_settings: getBrowserSpecificSettings(config.browser),
     icons: getIcons(config.icons, config.browser),
     permissions: ["storage", "scripting"],
@@ -20,8 +21,6 @@ export default (): string =>
       "<all_urls>",
     ],
     action: {
-      // firefox supports it?
-      //browser_style: true,
       default_popup: config.popupHtml,
       default_icon: getIcons(config.icons, config.browser),
     },
@@ -55,25 +54,13 @@ export default (): string =>
         match_about_blank: true,
         run_at: "document_start",
         world: "ISOLATED",
-        js: [
-          config.needsPolyfill ? config.polyfill.output : undefined,
-          config.worker.output,
-        ].filter((script) => script !== undefined),
+        js: [config.worker.output],
       },
 
       {
         matches: ["<all_urls>"],
         run_at: "document_start",
-        js: [
-          // We need to put the polyfill both here and above, because Chrome
-          // does not seem to guarantee the content scripts to run in order.
-          // Each `js` array runs in order, but not the `content_scripts` array
-          // it seems. See: https://github.com/lydell/LinkHints/issues/51
-          // It’s a tiny bit wasteful to load the polyfill twice in the top
-          // frame, but it’s not so bad.
-          config.needsPolyfill ? config.polyfill.output : undefined,
-          config.renderer.output,
-        ].filter((script) => script !== undefined),
+        js: [config.renderer.output],
       },
     ].filter((s) => s !== undefined),
   });
@@ -93,9 +80,6 @@ function getBrowserSpecificSettings(browser: Browser | undefined): unknown {
         gecko: {
           id: config.meta.geckoId,
           strict_min_version: "128.0",
-          data_collection_permissions: {
-            required: ["none"],
-          },
         },
       };
   }
