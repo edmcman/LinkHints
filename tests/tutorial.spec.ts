@@ -249,13 +249,16 @@ test("Run through tutorial", async ({
     console.log("Activating hints again with Alt+Shift+L");
 
     // Copy "Link Hints adds two extra shortcuts:" to clipboard
+    // `grantPermissions` replaces the default permissions, so it must happen
+    // before the copy: otherwise the extension's `writeText` races it and is
+    // sometimes denied.
+    if (browserName === "chromium") {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    }
     console.log("Pressing Alt+n to copy selected text");
     await page.keyboard.press("Alt+n");
 
     // Verify clipboard contents
-    if (browserName === "chromium") {
-      await context.grantPermissions(["clipboard-read"]);
-    }
     console.log("Checking clipboard contents");
     await expect
       .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
