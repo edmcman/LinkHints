@@ -2218,10 +2218,12 @@ export default class BackgroundProgram {
     const { hintsState } = tabState;
 
     fireAndForget(
-      browser.action.setBadgeText({
-        text: getBadgeText(hintsState),
-        tabId,
-      }),
+      browser.action
+        .setBadgeText({
+          text: getBadgeText(hintsState),
+          tabId,
+        })
+        .catch(ignoreClosedTab),
       "BackgroundProgram#updateBadge->setBadgeText"
     );
   }
@@ -2520,6 +2522,17 @@ function isSavedTabState(value: unknown): value is TabState {
         Array.isArray(hints.time._durations) &&
         (hints.type !== "Hinting" || Array.isArray(hints.elementsWithHints))))
   );
+}
+
+// A tab that is closing rejects per-tab calls a few milliseconds before
+// `tabs.onRemoved` is delivered, so there is no way to know beforehand.
+function ignoreClosedTab(error: unknown): void {
+  if (
+    !(error instanceof Error) ||
+    !/No tab with id|Invalid tab ID/.test(error.message)
+  ) {
+    throw error;
+  }
 }
 
 function makeEmptyTabState(tabId: number | undefined): TabState {
