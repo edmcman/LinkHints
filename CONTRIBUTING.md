@@ -102,7 +102,7 @@ To run the automated end-to-end tests using Playwright:
 npm run test:playwright
 ```
 
-This will compile the extension and run tests in Firefox, verifying functionality like the tutorial workflow.
+This compiles the extension and runs the browser-specific Playwright suite, including the behavioral regression coverage for stable pages in `html/`. The diagnostic and performance pages under `html/experiments/` intentionally remain manual tests.
 
 ### Chrome and Firefox
 

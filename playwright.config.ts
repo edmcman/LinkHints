@@ -23,7 +23,7 @@ const config: PlaywrightTestConfig = {
       name: "firefox",
       use: {
         browserName: "firefox",
-        // extensions need to be loaded in headed mode
+        // Extension loading requires a headed browser; test commands use Xvfb.
         headless: false,
       },
     },
@@ -32,7 +32,7 @@ const config: PlaywrightTestConfig = {
       use: {
         browserName: "chromium",
         // use Playwright's bundled Chromium (no channel specified)
-        // extensions need to be loaded in headed mode
+        // Extension loading requires a headed browser; test commands use Xvfb.
         headless: false,
       },
     },

@@ -1,3 +1,6 @@
+import { readFile } from "fs/promises";
+import { createServer } from "http";
+import type { AddressInfo } from "net";
 import path from "path";
 import type { BrowserContext, Page } from "playwright";
 import { createFixture } from "playwright-webextext";
@@ -11,7 +14,91 @@ const compiledDir = `compiled-${process.env.BROWSER}`;
 const extensionPath = path.resolve(__dirname, "..", compiledDir);
 
 const { test, expect } = createFixture(extensionPath);
-export { expect, test };
+
+type HtmlServer = {
+  url: (file: string, crossOrigin?: boolean) => string;
+};
+
+const htmlDir = path.resolve(__dirname, "..", "html");
+
+const contentType = (file: string): string => {
+  switch (path.extname(file)) {
+    case ".xhtml":
+      return "application/xhtml+xml";
+    case ".svg":
+      return "image/svg+xml";
+    case ".css":
+      return "text/css";
+    case ".js":
+      return "text/javascript";
+    case ".json":
+      return "application/json";
+    default:
+      return "text/html";
+  }
+};
+
+const htmlTest = test.extend<{ html: HtmlServer }>({
+  html: async ({ browser: _browser }, use) => {
+    let port = 0;
+    const serve = async (
+      request: import("http").IncomingMessage,
+      response: import("http").ServerResponse
+    ): Promise<void> => {
+      const pathname = decodeURIComponent(
+        new URL(request.url ?? "/", "http://localhost").pathname
+      );
+      if (pathname === "/__regression_select.html") {
+        response.setHeader("Content-Type", "text/html");
+        response.end('<a href="#selected">Local target</a>');
+        return;
+      }
+      const file = path.resolve(htmlDir, `.${pathname}`);
+      if (!file.startsWith(`${htmlDir}${path.sep}`)) {
+        response.writeHead(403).end();
+        return;
+      }
+      try {
+        response.setHeader("Content-Type", contentType(file));
+        const body = await readFile(file);
+        response.end(
+          path.extname(file) === ".html"
+            ? body.toString().replace(/localhost:5000/g, `localhost:${port}`)
+            : body
+        );
+      } catch {
+        response.writeHead(404).end();
+      }
+    };
+    const server = createServer((request, response) => {
+      void serve(request, response);
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    ({ port } = server.address() as AddressInfo);
+    try {
+      await use({
+        // localhost deliberately differs from 127.0.0.1 for frame-origin tests.
+        url: (file, crossOrigin = false) =>
+          `http://${crossOrigin ? "localhost" : "127.0.0.1"}:${port}/${file}`,
+      });
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error === undefined) {
+            resolve();
+          } else {
+            reject(error);
+          }
+        });
+      });
+    }
+  },
+});
+
+export { expect, htmlTest as test };
 
 // Helpers for console log capture
 export function startConsoleCapture(page: Page): Array<string> {
@@ -43,7 +130,7 @@ export async function activateHints(
       undefined
   );
   // UGH I want to get rid of this so bad.
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(1_000);
   console.log("Pressing keystroke to activate hints:", keystroke);
   await page.keyboard.press(keystroke);
   await page.waitForFunction(
@@ -53,6 +140,32 @@ export async function activateHints(
   );
   // UGH I want to get rid of this so bad.
   await page.waitForTimeout(200);
+}
+
+export async function dismissHints(page: Page): Promise<void> {
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#__LinkHintsWebExt")?.shadowRoot?.innerHTML ===
+      undefined
+  );
+}
+
+export async function hints(page: Page): Promise<Array<string>> {
+  return page.locator("#__LinkHintsWebExt").evaluate((element) => {
+    const root = element.shadowRoot;
+    if (root === null) {
+      throw new Error("Missing hint shadow root");
+    }
+    return Array.from(
+      root.querySelectorAll(".hint"),
+      (hint) => hint.textContent ?? ""
+    );
+  });
+}
+
+export async function selectHint(page: Page, hint: string): Promise<void> {
+  await page.keyboard.type(hint);
 }
 
 // Helper to snapshot hints
