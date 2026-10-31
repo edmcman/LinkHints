@@ -231,7 +231,7 @@ export function normalizeKeypress({
     shift: keypress.shift,
     keyTranslations,
   });
-  const key = translated !== undefined ? translated : keypress.key;
+  const key = translated ?? keypress.key;
 
   // Printable and non-printable are handled slightly differently.
   const isChar = key.length === 1;

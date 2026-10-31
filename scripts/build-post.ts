@@ -3,7 +3,7 @@ import crx3 from "crx3";
 import type { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
-import readdirp from "readdirp";
+import { readdirpPromise } from "readdirp";
 import { ZipFile } from "yazl";
 
 import config from "../project.config";
@@ -48,8 +48,8 @@ function relative(filePath: string): string {
 
 async function makeSourceCodeBundle(): Promise<void> {
   const files = [
-    ".eslintignore",
     ".eslintrc.js",
+    "eslint.config.js",
     ".prettierignore",
     ".prettierrc.json",
     "LICENSE",
@@ -127,7 +127,7 @@ function getGitCommit(): string {
 }
 
 async function getAllFilesInDir(dir: string): Promise<Array<string>> {
-  const results = await readdirp.promise(dir);
+  const results = await readdirpPromise(dir);
   return results.map(({ fullPath }) => fullPath);
 }
 

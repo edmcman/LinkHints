@@ -21,7 +21,7 @@ export default function Attachment({
           TinyLabel: label !== undefined,
         })}
       >
-        {label !== undefined ? label : contents}
+        {label ?? contents}
       </span>
       {children}
     </Tag>

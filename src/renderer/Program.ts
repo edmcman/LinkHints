@@ -117,7 +117,6 @@ export default class RendererProgram {
 
     const container = document.createElement("div");
     // Enable popover mode, allowing `.showPopover()` to be called later.
-    // @ts-expect-error This property is missing in the TypeScript version we use.
     container.popover = "manual";
     container.id = CONTAINER_ID;
     setStyles(container, CONTAINER_STYLES);
@@ -425,8 +424,6 @@ export default class RendererProgram {
       // `.showPopover()` shipped in Firefox 125, released 2024-04-16.
       // At the time of writing (2024-09-03) that was a bit too recent to be
       // required, so we use `?.` to only call it if available.
-      // @ts-expect-error This method is missing in the TypeScript version we use.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       this.container.element.showPopover?.();
     }
 

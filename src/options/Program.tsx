@@ -763,14 +763,11 @@ export default class OptionsProgram extends Component<Props, State> {
                           const normalizedKeypress = normalizeKeypress({
                             keypress,
                             keyTranslations:
-                              keyTranslations !== undefined
-                                ? keyTranslations
-                                : options.keyTranslations,
+                              keyTranslations ?? options.keyTranslations,
                           });
                           const finalKey =
-                            normalizedKeypress.printableKey !== undefined
-                              ? normalizedKeypress.printableKey
-                              : normalizedKeypress.key;
+                            normalizedKeypress.printableKey ??
+                            normalizedKeypress.key;
                           if (keyTranslations !== undefined) {
                             this.saveOptions({ keyTranslations });
                           }

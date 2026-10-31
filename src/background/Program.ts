@@ -535,8 +535,7 @@ export default class BackgroundProgram {
 
     const tabStateRaw =
       info === undefined ? undefined : this.tabState.get(info.tabId);
-    const tabState =
-      tabStateRaw === undefined ? makeEmptyTabState(info?.tabId) : tabStateRaw;
+    const tabState = tabStateRaw ?? makeEmptyTabState(info?.tabId);
 
     if (info !== undefined && tabStateRaw === undefined) {
       const { [info.tabId.toString()]: perf = [] } = this.restoredTabsPerf;
@@ -3000,7 +2999,7 @@ function updateHints({
     .map((element, index): HintUpdate => {
       const matches = element.hint.startsWith(enteredChars);
       const isHighlighted =
-        (match !== undefined && element.hint === match.hint) ||
+        element.hint === match?.hint ||
         element.hint === highlightedHint ||
         highlightedKeys.has(elementKey(element));
 

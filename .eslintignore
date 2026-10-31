@@ -1,7 +1,0 @@
-!/**/.eslintrc.js
-!/*.js
-custom.config.*
-/compiled/
-/compiled*/
-/compiled-docs/
-/playwright-report

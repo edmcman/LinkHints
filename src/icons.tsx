@@ -194,9 +194,7 @@ function render(
         )}
         {shouldDrawPointer && sparks}
       </g>
-    </svg>,
-    undefined,
-    { xml: true }
+    </svg>
   );
 }
 

@@ -97,7 +97,20 @@ module.exports = {
         "@typescript-eslint/array-type": [warn, { default: "generic" }],
         "@typescript-eslint/await-thenable": error,
         "@typescript-eslint/ban-ts-comment": error,
-        "@typescript-eslint/ban-types": error,
+        "@typescript-eslint/no-restricted-types": [
+          error,
+          {
+            types: {
+              "{}": { message: "Use a more specific type." },
+              Boolean: { message: "Use boolean instead." },
+              Function: { message: "Define a function type instead." },
+              Number: { message: "Use number instead." },
+              Object: { message: "Use object instead." },
+              String: { message: "Use string instead." },
+              Symbol: { message: "Use symbol instead." },
+            },
+          },
+        ],
         "@typescript-eslint/consistent-generic-constructors": warn,
         "@typescript-eslint/consistent-type-assertions": [
           error,
@@ -113,7 +126,7 @@ module.exports = {
           warn,
           { allowExpressions: true },
         ],
-        "@typescript-eslint/lines-between-class-members": warn,
+        "lines-between-class-members": warn,
         "@typescript-eslint/method-signature-style": warn,
         "@typescript-eslint/no-array-constructor": warn,
         "@typescript-eslint/no-base-to-string": error,
@@ -140,7 +153,7 @@ module.exports = {
         "@typescript-eslint/no-require-imports": error,
         "@typescript-eslint/no-shadow": error,
         "@typescript-eslint/no-this-alias": warn,
-        "@typescript-eslint/no-throw-literal": error,
+        "no-throw-literal": error,
         "@typescript-eslint/no-unnecessary-boolean-literal-compare": warn,
         "@typescript-eslint/no-unnecessary-type-arguments": warn,
         "@typescript-eslint/no-unnecessary-type-assertion": warn,
@@ -175,7 +188,7 @@ module.exports = {
         "@typescript-eslint/restrict-plus-operands": error,
         "@typescript-eslint/restrict-template-expressions": error,
         "@typescript-eslint/return-await": error,
-        "@typescript-eslint/sort-type-union-intersection-members": warn,
+        "@typescript-eslint/sort-type-constituents": warn,
         "@typescript-eslint/strict-boolean-expressions": [
           error,
           {
@@ -184,7 +197,10 @@ module.exports = {
             allowNullableObject: false,
           },
         ],
-        "@typescript-eslint/switch-exhaustiveness-check": error,
+        "@typescript-eslint/switch-exhaustiveness-check": [
+          error,
+          { considerDefaultExhaustiveForUnions: true },
+        ],
         "@typescript-eslint/triple-slash-reference": warn,
         "@typescript-eslint/unbound-method": error,
         "@typescript-eslint/unified-signatures": warn,

@@ -3,6 +3,8 @@ import { createServer } from "http";
 import type { AddressInfo } from "net";
 import path from "path";
 
+const extensionPath = path.resolve(__dirname, "..", "compiled-chrome");
+
 (
   [
     "uninstall",
@@ -47,8 +49,25 @@ import path from "path";
       }
       const session = await browser.newBrowserCDPSession();
       const { id } = await session.send("Extensions.loadUnpacked", {
-        path: path.resolve(__dirname, "..", "compiled-chrome"),
+        path: extensionPath,
       });
+      // Chrome disables unpacked extensions on reload unless developer mode is on.
+      const extensionsPage = await context.newPage();
+      await extensionsPage.goto("chrome://extensions/");
+      await extensionsPage.evaluate(() =>
+        (
+          globalThis as unknown as {
+            chrome: {
+              developerPrivate: {
+                updateProfileConfiguration: (config: object) => Promise<void>;
+              };
+            };
+          }
+        ).chrome.developerPrivate.updateProfileConfiguration({
+          inDeveloperMode: true,
+        })
+      );
+      await extensionsPage.close();
       const background = await context.newPage();
       await background.goto(`chrome-extension://${id}/popup.html`);
       await page.bringToFront();

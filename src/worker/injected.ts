@@ -143,6 +143,8 @@ export const injected = (): (() => void) => {
         name
       ) as PropertyDescriptor;
       const prop = "value" in descriptor ? "value" : "set";
+      // This original method is invoked with its page-defined receiver below.
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       const originalFn = descriptor[prop] as AnyFunction;
 
       const { fnMap } = this;
@@ -214,6 +216,8 @@ export const injected = (): (() => void) => {
 
       const newDescriptor = { ...descriptor, [prop]: fn };
 
+      // The descriptor function is called through Reflect.defineProperty only.
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       setLength(newDescriptor[prop]);
 
       // Finally override the method with the created function.
@@ -311,12 +315,10 @@ export const injected = (): (() => void) => {
     }
 
     requestIdleCallback(): void {
-      if (this.idleCallbackId === undefined) {
-        this.idleCallbackId = requestIdleCallback((deadline) => {
-          this.idleCallbackId = undefined;
-          this.flushQueue(deadline);
-        });
-      }
+      this.idleCallbackId ??= requestIdleCallback((deadline) => {
+        this.idleCallbackId = undefined;
+        this.flushQueue(deadline);
+      });
     }
 
     flushQueue(deadline: Deadline): void {

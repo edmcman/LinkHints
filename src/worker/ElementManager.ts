@@ -476,12 +476,10 @@ export default class ElementManager {
   }
 
   requestIdleCallback(): void {
-    if (this.idleCallbackId === undefined) {
-      this.idleCallbackId = requestIdleCallback((deadline) => {
-        this.idleCallbackId = undefined;
-        this.flushQueue(deadline);
-      });
-    }
+    this.idleCallbackId ??= requestIdleCallback((deadline) => {
+      this.idleCallbackId = undefined;
+      this.flushQueue(deadline);
+    });
   }
 
   onFrameIntersection(entries: Array<IntersectionObserverEntry>): void {
@@ -1040,11 +1038,10 @@ export default class ElementManager {
     }
 
     const candidates =
-      passedCandidates !== undefined
-        ? passedCandidates
-        : types === "selectable"
+      passedCandidates ??
+      (types === "selectable"
         ? this.getAllElements(document)
-        : this.elements.keys();
+        : this.elements.keys());
     const range = document.createRange();
     const deduper = new Deduper();
 
@@ -1684,7 +1681,7 @@ function getMeasurements(
   }
 
   time.start("measurements:end");
-  const { x, y } = nonCoveredPoint === undefined ? hintPoint : nonCoveredPoint;
+  const { x, y } = nonCoveredPoint ?? hintPoint;
 
   // Where to place the hint and the weight of the element.
   return {
@@ -2165,7 +2162,7 @@ function hasClickListenerProp(element: HTMLElement): boolean {
 function getXY(passedBox: Box | ClientRect): { x: number; y: number } {
   // Chrome and Firefox _do_ support `.x` and `.y` on ClientRects (aka
   // DOMRects), but TypeScript does not include them.
-  const box = passedBox as Box;
+  const box = passedBox;
   return {
     x: box.x,
     y: box.y + box.height / 2,

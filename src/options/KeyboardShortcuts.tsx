@@ -90,8 +90,7 @@ export default class KeyboardShortcuts extends Component<Props, State> {
         alt: capturedKeypress.alt,
         cmd: capturedKeypress.cmd,
         ctrl: capturedKeypress.ctrl,
-        shift:
-          capturedKeypress.shift === undefined ? false : capturedKeypress.shift,
+        shift: capturedKeypress.shift ?? false,
       };
 
       const confirm = (newShortcutError: {

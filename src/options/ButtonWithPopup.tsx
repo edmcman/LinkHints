@@ -10,7 +10,7 @@ export default function ButtonWithPopup({
   onOpenChange,
   className = "",
   ...restProps
-}: JSX.HTMLAttributes<HTMLButtonElement> & {
+}: JSX.ButtonHTMLAttributes & {
   buttonContent: VNode | string;
   popupContent: (options: { close: () => void }) => VNode;
   open?: boolean;
@@ -22,7 +22,7 @@ export default function ButtonWithPopup({
 
   const [openState, setOpenState] = useState<boolean>(false);
 
-  const open = openProp !== undefined ? (openProp as boolean) : openState;
+  const open = openProp ?? openState;
 
   const rootRef = useRef<HTMLDivElement>(null);
 

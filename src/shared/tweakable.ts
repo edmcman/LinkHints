@@ -206,7 +206,6 @@ export function tweakable(
           }
 
           case "SelectorString": {
-            // eslint-disable-next-line @typescript-eslint/no-loop-func
             const decoded = chain(string, (val) => {
               // Guard for non-DOM contexts (service workers / background pages
               // without a document). If `document` is not available, log and

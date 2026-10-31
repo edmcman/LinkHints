@@ -15,8 +15,8 @@ export default function TextInput({
   className = "",
   onKeyDown,
   ...restProps
-}: JSX.HTMLAttributes<HTMLInputElement> &
-  JSX.HTMLAttributes<HTMLTextAreaElement> & {
+}: JSX.InputHTMLAttributes &
+  JSX.TextareaHTMLAttributes & {
     savedValue: string;
     normalize?: (text: string) => string;
     save?: (text: string, reason: Reason) => void;
@@ -31,12 +31,12 @@ export default function TextInput({
   const [focused, setFocused] = useState<boolean>(false);
   const [stateValue, setStateValue] = useState<string | undefined>(undefined);
 
-  const value = stateValue !== undefined ? stateValue : savedValue;
+  const value = stateValue ?? savedValue;
 
   const saveRef = useRef<typeof saveProp>(undefined);
   saveRef.current = saveProp;
 
-  const normalizeRef = useRef<typeof normalize>();
+  const normalizeRef = useRef<typeof normalize | undefined>(undefined);
   normalizeRef.current = normalize;
 
   const selectionStartRef = useRef<number>(0);

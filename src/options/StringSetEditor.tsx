@@ -20,7 +20,7 @@ export default function StringSetEditor({
     undefined
   );
 
-  const value = stateValue !== undefined ? stateValue : Array.from(savedValue);
+  const value = stateValue ?? Array.from(savedValue);
   const endsWithBlank =
     value.length > 0 && value[value.length - 1].trim() === "";
 

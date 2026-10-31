@@ -819,8 +819,8 @@ export default class WorkerProgram {
       Array<VisibleElement | undefined>,
       number
     ] = this.elementManager.getVisibleElements(types, viewports, time);
-    const elements = elementsWithNulls.flatMap((elementData) =>
-      elementData === undefined ? [] : elementData
+    const elements = elementsWithNulls.flatMap(
+      (elementData) => elementData ?? []
     );
 
     time.start("frames");
@@ -1544,6 +1544,8 @@ function firefoxPopupBlockerWorkaround({
       fn: (original: () => void) => () => void
     ): (() => void) => {
       const { prototype } = wrappedJSObject.Event;
+      // This must retain its receiver until the page calls it on an event.
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       const original = prototype[method];
       exportFunction(fn(original), prototype, {
         defineAs: method,
