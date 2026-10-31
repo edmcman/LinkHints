@@ -40,7 +40,6 @@ import {
   DOCUMENT_WRITE_EVENT,
   FLUSH_EVENT,
   FromInjected,
-  injected,
   INJECTED_READY_EVENT,
   OPEN_SHADOW_ROOT_CREATED_EVENT,
   QUEUE_EVENT,
@@ -291,9 +290,7 @@ export default class ElementManager {
     this.addWindowListeners();
 
     this.injectScript();
-    if (BROWSER === "chrome") {
-      this.configureInjected();
-    }
+    this.configureInjected();
 
     // Wait for tweakable values to load before starting the MutationObserver,
     // in case the user has changed `ATTRIBUTES_MUTATION`. After the
@@ -348,7 +345,7 @@ export default class ElementManager {
   addWindowListeners(): void {
     // When adding new event listeners, consider also subscribing in
     // `onRegisterSecretElement` and `setShadowRoot`.
-    if (BROWSER !== "firefox") {
+    {
       this.windowListenerResets.reset();
       this.windowListenerResets.add(
         addEventListener(
@@ -404,13 +401,12 @@ export default class ElementManager {
       return;
     }
 
-    // Firefox uses its xray system to inject
     if (BROWSER === "firefox") {
-      log("log", "ElementManager#injectScript: injecting");
-      injected(this);
-      return;
-    } else {
-      // Chrome uses a content script, so it's already injected.
+      (
+        window.wrappedJSObject as Window & {
+          linkHintsExtensionAlive?: () => boolean;
+        }
+      ).linkHintsExtensionAlive = exportFunction(() => true, window);
     }
   }
 
@@ -672,14 +668,7 @@ export default class ElementManager {
   }
 
   sendInjectedEvent(eventName: string): void {
-    if (BROWSER === "firefox") {
-      const listeners = this.injectedListeners.get(eventName) ?? [];
-      for (const listener of listeners) {
-        listener();
-      }
-    } else {
-      document.dispatchEvent(new CustomEvent(eventName));
-    }
+    document.dispatchEvent(new CustomEvent(eventName));
   }
 
   configureInjected(): void {

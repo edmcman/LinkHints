@@ -92,6 +92,7 @@ function getBrowserSpecificSettings(browser: Browser | undefined): unknown {
       return {
         gecko: {
           id: config.meta.geckoId,
+          strict_min_version: "128.0",
           data_collection_permissions: {
             required: ["none"],
           },

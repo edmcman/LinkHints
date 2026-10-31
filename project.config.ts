@@ -183,8 +183,8 @@ function browserSpecificIgnores(browser: Browser | undefined): Array<string> {
 function injectedAsContentScript(browser: Browser | undefined): boolean {
   switch (browser) {
     case "chrome":
-      return true;
     case "firefox":
+      return true;
     case undefined:
       return false;
   }

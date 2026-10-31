@@ -19,8 +19,9 @@
 
 ## Todo
 
-- [ ] Fix PROD behavior
-- [ ] Detect/handle extension removal (previously onDisconnect code).
+- [ ] Fix PROD behavior: production builds do not track page click listeners.
+- [x] Chrome: clean up hints and page hooks after extension removal or disablement, including after service-worker restart.
+- [x] Firefox 128+: clean up hints and page hooks after extension removal or disablement with a main-world content script.
 - [x] Restore shortcuts and click-listener detection after extension reload; tested with an unpacked extension installed through the debugging protocol.
 - [x] Ensure that we don't inject into existing tabs on service worker restart.
 - [x] Inject content scripts into existing tabs in Chrome.

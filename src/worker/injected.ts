@@ -4,9 +4,7 @@ import { log, makeRandomToken } from "../shared/main";
 // `.addEventListener` (and friends) so we can detect click listeners.
 // This is a bit fiddly because we try to cover our tracks as good as possible.
 
-// Chrome loads this file in the main world as a content script. Firefox calls
-// `injected` directly and communicates through `communicator`, using
-// `.wrappedJSObject`, `exportFunction` and `XPCNativeWrapper`.
+// This file runs in the page's main world as a content script.
 
 // All types of events that likely makes an element clickable. All code and
 // comments that deal with this only refer to "click", though, to keep things
@@ -58,18 +56,11 @@ export type FromInjected =
   | { type: "Queue"; hasQueue: boolean }
   | { type: "ShadowRootCreated"; shadowRoot: ShadowRoot };
 
-export const injected = (communicator?: {
-  onInjectedMessage: (message: FromInjected) => unknown;
-  addEventListener: (
-    eventName: string,
-    listener: () => unknown,
-    _?: true
-  ) => unknown;
-}): (() => void) => {
+export const injected = (): (() => void) => {
   log("log", "injected() called");
 
   // Refers to the page `window` both in Firefox and other browsers.
-  const win = BROWSER === "firefox" ? window.wrappedJSObject ?? window : window;
+  const win = window;
 
   // These arrays are replaced in by ElementManager; only refer to them once.
   const clickableEventNames = CLICKABLE_EVENT_NAMES;
@@ -165,48 +156,17 @@ export const injected = (communicator?: {
               // not the overriding function.
               apply(originalFn, apply(mapGet, fnMap, [that]) ?? that, args)
           : (that: unknown, ...args: Array<never>): unknown => {
-              let wrappedArgs = args;
-              if (BROWSER === "firefox") {
-                wrappedArgs = args.map((arg) => XPCNativeWrapper(arg));
-              }
-
               let prehookData = undefined;
               if (prehook !== undefined) {
                 try {
-                  prehookData = prehook(that, ...wrappedArgs);
+                  prehookData = prehook(that, ...args);
                 } catch (errorAny) {
                   const error = errorAny as Error;
                   logHookError(error, obj, name);
                 }
               }
 
-              // Since Firefox does not support running cleanups when an
-              // extension is disabled/updated (<bugzil.la/1223425>), hooks
-              // from the previous version will still be around (until the
-              // page is reloaded). `apply(originalFn, this, args)` fails with
-              // "can't access dead object" for the old hooks will fail, so
-              // ignore that error and abort those hooks.
-              let returnValue = undefined;
-              if (BROWSER === "firefox") {
-                try {
-                  returnValue = XPCNativeWrapper(
-                    apply(originalFn, that, args)
-                  ) as U;
-                } catch (errorAny) {
-                  const error = errorAny as Error | null | undefined;
-                  if (
-                    error !== null &&
-                    error !== undefined &&
-                    error.name === "TypeError" &&
-                    error.message === "can't access dead object"
-                  ) {
-                    return undefined;
-                  }
-                  throw error as Error;
-                }
-              } else {
-                returnValue = apply(originalFn, that, args) as U;
-              }
+              const returnValue = apply(originalFn, that, args) as U;
 
               // In case there's a mistake in `hook` it shouldn't cause the entire
               // overridden method to fail and potentially break the whole page.
@@ -216,7 +176,7 @@ export const injected = (communicator?: {
                 const result = hook(
                   { returnValue, prehookData },
                   that,
-                  ...wrappedArgs
+                  ...args
                 );
                 if (
                   typeof result === "object" &&
@@ -241,8 +201,6 @@ export const injected = (communicator?: {
             }
       );
 
-      // Make sure that `.length` is correct. This has to be done _after_
-      // `exportFunction`.
       const setLength = (target: unknown): void => {
         Reflect.defineProperty(target as Record<string, unknown>, "length", {
           ...Reflect.getOwnPropertyDescriptor(Function.prototype, "length"),
@@ -254,22 +212,7 @@ export const injected = (communicator?: {
       // original in the case with no `hook` above.
       fnMap.set(fn, originalFn);
 
-      let newDescriptor = { ...descriptor, [prop]: fn };
-
-      if (BROWSER === "firefox") {
-        if (prop === "value") {
-          exportFunction(fn, obj, { defineAs: name });
-          setLength(obj[name]);
-          this.resetFns.push(() => {
-            exportFunction(originalFn, obj, { defineAs: name });
-          });
-          return;
-        }
-
-        newDescriptor = Object.assign(new win.Object(), descriptor, {
-          set: exportFunction(fn, new win.Object(), { defineAs: name }),
-        });
-      }
+      const newDescriptor = { ...descriptor, [prop]: fn };
 
       setLength(newDescriptor[prop]);
 
@@ -284,10 +227,7 @@ export const injected = (communicator?: {
     // returns "[native code]". This is used by lodash's `_.isNative`.
     // `.toLocaleString` is automatically taken care of when patching `.toString`.
     conceal(): void {
-      // This isn’t needed in Firefox, thanks to `exportFunction`.
-      if (BROWSER !== "firefox") {
-        this.hookInto(win.Function.prototype, "toString");
-      }
+      this.hookInto(win.Function.prototype, "toString");
     }
   }
 
@@ -366,11 +306,7 @@ export const injected = (communicator?: {
       this.requestIdleCallback();
 
       if (numItems === 1 && this.sendQueue.items.length === 0) {
-        if (communicator !== undefined) {
-          communicator.onInjectedMessage({ type: "Queue", hasQueue: true });
-        } else {
-          sendWindowEvent(QUEUE_EVENT, true);
-        }
+        sendWindowEvent(QUEUE_EVENT, true);
       }
     }
 
@@ -390,11 +326,7 @@ export const injected = (communicator?: {
       const hasQueue =
         this.queue.items.length > 0 || this.sendQueue.items.length > 0;
       if (hadQueue && !hasQueue) {
-        if (communicator !== undefined) {
-          communicator.onInjectedMessage({ type: "Queue", hasQueue: false });
-        } else {
-          sendWindowEvent(QUEUE_EVENT, false);
-        }
+        sendWindowEvent(QUEUE_EVENT, false);
       }
     }
 
@@ -494,15 +426,7 @@ export const injected = (communicator?: {
 
         const item = this.sendQueue.items[this.sendQueue.index];
 
-        if (communicator !== undefined) {
-          communicator.onInjectedMessage({
-            type: "ClickableChanged",
-            target: item.element,
-            clickable: item.added,
-          });
-        } else {
-          sendElementEvent(CLICKABLE_CHANGED_EVENT, item.element, item.added);
-        }
+        sendElementEvent(CLICKABLE_CHANGED_EVENT, item.element, item.added);
       }
 
       this.sendQueue = makeEmptyQueue();
@@ -562,7 +486,7 @@ export const injected = (communicator?: {
         // had a listener after all that was now removed. In Chrome this is
         // tracked correctly, but in Firefox we need to "lie" here and say that
         // the last listener was removed in case it was.
-        return BROWSER === "firefox";
+        return false;
       }
 
       const optionsSet = optionsByListener.get(listener);
@@ -670,9 +594,7 @@ export const injected = (communicator?: {
       document.documentElement === null
         ? [document, createElement("html")]
         : [document.documentElement, createElement("head")];
-    if (communicator === undefined) {
-      registerSecretElement(root, secretElement);
-    }
+    registerSecretElement(root, secretElement);
     return secretElement;
   }
 
@@ -895,12 +817,7 @@ export const injected = (communicator?: {
   }: {
     returnValue: ShadowRoot;
   }): void {
-    if (communicator !== undefined) {
-      communicator.onInjectedMessage({
-        type: "ShadowRootCreated",
-        shadowRoot,
-      });
-    } else if (shadowRoot.mode === "open") {
+    if (shadowRoot.mode === "open") {
       // In “open” mode, ElementManager can access shadow roots via the
       // `.shadowRoot` property on elements. All we need to do here is tell
       // the ElementManager that a shadow root has been created.
@@ -945,12 +862,9 @@ export const injected = (communicator?: {
       consoleLog(`[${META_SLUG}] Resetting injected.ts`, RESET_EVENT);
     }
 
-    // ElementManager removes listeners itself on reset.
-    if (communicator === undefined) {
-      document.removeEventListener(FLUSH_EVENT, onFlush, true);
-      document.removeEventListener(RESET_EVENT, onReset, true);
-      document.removeEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
-    }
+    document.removeEventListener(FLUSH_EVENT, onFlush, true);
+    document.removeEventListener(RESET_EVENT, onReset, true);
+    document.removeEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
 
     // Reset the overridden methods when the extension is shut down.
     clickListenerTracker.reset();
@@ -959,13 +873,10 @@ export const injected = (communicator?: {
 
   // Use `document` rather than `window` in order not to appear in the “Global
   // event listeners” listing in devtools.
-  const target = communicator ?? document;
-  target.addEventListener(FLUSH_EVENT, onFlush, true);
-  target.addEventListener(RESET_EVENT, onReset, true);
-  if (communicator === undefined) {
-    document.addEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
-    sendWindowEvent(INJECTED_READY_EVENT, undefined);
-  }
+  document.addEventListener(FLUSH_EVENT, onFlush, true);
+  document.addEventListener(RESET_EVENT, onReset, true);
+  document.addEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
+  sendWindowEvent(INJECTED_READY_EVENT, undefined);
 
   hookManager.hookInto(
     win.EventTarget.prototype,
@@ -989,16 +900,10 @@ export const injected = (communicator?: {
   // (Internally, it doesn’t actually call the JavaScript `document.open()`).
   // Hook them, so we can re-apply the listeners.
   function onDocumentWrite(): void {
-    if (communicator !== undefined) {
-      communicator.onInjectedMessage({ type: "DocumentWrite" });
-    } else {
-      sendWindowEvent(DOCUMENT_WRITE_EVENT, undefined);
-    }
+    sendWindowEvent(DOCUMENT_WRITE_EVENT, undefined);
   }
   for (const method of ["open", "write"]) {
     hookManager.hookInto(
-      // @ts-expect-error TypeScript thinks `win.Document` does not exist.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       win.Document.prototype,
       method,
       () => {

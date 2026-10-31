@@ -29,6 +29,7 @@ import {
   fireAndForget,
   getViewport,
   log,
+  onInvalidated,
   Resets,
   setStyles,
 } from "../shared/main";
@@ -203,6 +204,14 @@ export default class RendererProgram {
     port.onDisconnect.addListener(() => {
       if (this.port === port) {
         this.port = undefined;
+        onInvalidated(
+          () => {
+            this.stop();
+          },
+          () => {
+            this.connect();
+          }
+        );
       }
     });
   }
@@ -210,8 +219,9 @@ export default class RendererProgram {
   stop(): void {
     log("log", "RendererProgram#stop");
     this.resets.reset();
-    this.port?.disconnect();
+    const { port } = this;
     this.port = undefined;
+    port?.disconnect();
     this.unrender();
   }
 

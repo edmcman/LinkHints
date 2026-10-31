@@ -25,6 +25,7 @@ import {
   LAST_NON_WHITESPACE,
   log,
   NON_WHITESPACE,
+  onInvalidated,
   Resets,
   walkTextNodes,
 } from "../shared/main";
@@ -134,6 +135,14 @@ export default class WorkerProgram {
     port.onDisconnect.addListener(() => {
       if (this.port === port) {
         this.port = undefined;
+        onInvalidated(
+          () => {
+            this.stop();
+          },
+          () => {
+            this.connect();
+          }
+        );
       }
     });
   }
@@ -141,8 +150,9 @@ export default class WorkerProgram {
   stop(): void {
     log("log", "WorkerProgram#stop");
     this.resets.reset();
-    this.port?.disconnect();
+    const { port } = this;
     this.port = undefined;
+    port?.disconnect();
     this.elementManager.stop();
     this.oneTimeWindowMessageToken = undefined;
     this.suppressNextKeyup = undefined;

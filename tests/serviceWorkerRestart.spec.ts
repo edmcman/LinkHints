@@ -319,13 +319,13 @@ test("restarts interrupted frame collection", async ({ context }) => {
     const popup = await context.newPage();
     await popup.goto(popupUrl);
     await page.bringToFront();
-    await stopBackground(context, page);
     await page
       .frameLocator("iframe")
       .locator("html")
       .evaluate((element) => {
         element.setAttribute("data-release", "");
       });
+    await stopBackground(context, page);
     await popup.evaluate(async () => {
       const api = globalThis as unknown as {
         chrome: {

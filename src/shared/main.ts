@@ -12,6 +12,32 @@ import {
 // ElementManager might not get the same random number.
 export const CONTAINER_ID = `__${META_SLUG}WebExt`;
 
+export function onInvalidated(
+  cleanup: () => void,
+  reconnect: () => void
+): void {
+  const delays = [100, 400, 1500];
+  function check(): void {
+    try {
+      browser.runtime.getManifest();
+    } catch {
+      cleanup();
+      return;
+    }
+    try {
+      reconnect();
+    } catch (error) {
+      log("debug", "Failed to reconnect extension port", error);
+    }
+    const delay = delays.shift();
+    if (delay !== undefined) {
+      setTimeout(check, delay);
+    }
+  }
+  // Chrome can disconnect ports before it invalidates the extension context.
+  setTimeout(check, 100);
+}
+
 export type LogLevel = ReturnType<typeof LogLevel>;
 export const LogLevel = stringUnion({
   error: null,
