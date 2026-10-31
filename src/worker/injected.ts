@@ -4,20 +4,8 @@ import { log, makeRandomToken } from "../shared/main";
 // `.addEventListener` (and friends) so we can detect click listeners.
 // This is a bit fiddly because we try to cover our tracks as good as possible.
 
-// Basically everything in this file has to be inside the `export default`
-// function, since `.toString()` is called on it in ElementManager. This also
-// means that `import`s generally cannot be used in this file. All of the below
-// constants are `.replace()`:ed in by ElementManager, but they are defined in
-// this file so that TypeScript knows about them.
-
-// NOTE: If you add a new constant, you have to update the `constants` object in
-// ElementManager.ts as well!
-
-// To make things even more complicated, in Firefox the `export default`
-// function is actually executed rather than inserted as an inline script. This
-// is to work around Firefox’s CSP limitations. As a bonus, Firefox can
-// communicate with this file directly (via the `communicator` parameter) rather
-// than via very clever usage of DOM events. This works in Firefox due to
+// Chrome loads this file in the main world as a content script. Firefox calls
+// `injected` directly and communicates through `communicator`, using
 // `.wrappedJSObject`, `exportFunction` and `XPCNativeWrapper`.
 
 // All types of events that likely makes an element clickable. All code and
@@ -41,27 +29,28 @@ export const CLICKABLE_EVENT_PROPS: Array<string> = CLICKABLE_EVENT_NAMES.map(
 // events altogether.
 const prefix = `__${META_SLUG}WebExt_${BUILD_ID}_`;
 
-// Events that don’t need to think about the iframe edge case described above
-// can use this more secure prefix, with a practically unguessable part in it.
-const secretPrefix = `__${META_SLUG}WebExt_${makeRandomToken()}_`;
-
 export const CLICKABLE_CHANGED_EVENT = `${prefix}ClickableChanged`;
 export const OPEN_SHADOW_ROOT_CREATED_EVENT = `${prefix}OpenShadowRootCreated`;
 export const CLOSED_SHADOW_ROOT_CREATED_1_EVENT = `${prefix}ClosedShadowRootCreated1`;
 export const CLOSED_SHADOW_ROOT_CREATED_2_EVENT = `${prefix}ClosedShadowRootCreated2`;
 
-export const QUEUE_EVENT = `${secretPrefix}Queue`;
-export const DOCUMENT_WRITE_EVENT = `${secretPrefix}DocumentWrite`;
+export const secretPrefix = `__${META_SLUG}WebExt_${makeRandomToken()}_`;
+export let QUEUE_EVENT = `${secretPrefix}Queue`;
+export let DOCUMENT_WRITE_EVENT = `${secretPrefix}DocumentWrite`;
 
 // If an element is not inserted into the page, events fired on it won’t reach
 // ElementManager’s window event listeners. Instead, such elements are
 // temporarily inserted into a secret element. This event is used to register
 // the secret element in ElementManager.
-export const REGISTER_SECRET_ELEMENT_EVENT = `${secretPrefix}RegisterSecretElement`;
+export let REGISTER_SECRET_ELEMENT_EVENT = `${secretPrefix}RegisterSecretElement`;
+// The content script and main-world script have separate module instances.
+// This event exchanges the content script's per-frame prefix between them.
+export const CONFIGURE_INJECTED_EVENT = `${prefix}ConfigureInjected`;
+export const INJECTED_READY_EVENT = `${prefix}InjectedReady`;
 
 // Events sent from ElementManager to this file.
-export const FLUSH_EVENT = `${secretPrefix}Flush`;
-export const RESET_EVENT = `${secretPrefix}Reset`;
+export let FLUSH_EVENT = `${secretPrefix}Flush`;
+export let RESET_EVENT = `${secretPrefix}Reset`;
 
 export type FromInjected =
   | { type: "ClickableChanged"; target: EventTarget; clickable: boolean }
@@ -682,13 +671,17 @@ export const injected = (communicator?: {
         ? [document, createElement("html")]
         : [document.documentElement, createElement("head")];
     if (communicator === undefined) {
-      apply(appendChild, root, [secretElement]);
-      apply(dispatchEvent, secretElement, [
-        new CustomEvent2(REGISTER_SECRET_ELEMENT_EVENT),
-      ]);
-      apply(removeChild, root, [secretElement]);
+      registerSecretElement(root, secretElement);
     }
     return secretElement;
+  }
+
+  function registerSecretElement(root: Node, element: HTMLElement): void {
+    apply(appendChild, root, [element]);
+    apply(dispatchEvent, element, [
+      new CustomEvent2(REGISTER_SECRET_ELEMENT_EVENT),
+    ]);
+    apply(removeChild, root, [element]);
   }
 
   // In Firefox, it is also possible to use `sendWindowEvent` passing `element`
@@ -696,6 +689,28 @@ export const injected = (communicator?: {
   // is inserted into another frame. Chrome does not allow passing DOM elements
   // as `detail` from a page to an extension at all.
   const secretElement = makeSecretElement();
+  function onRegisterSecretElementRequest(): void {
+    registerSecretElement(document.documentElement ?? document, secretElement);
+  }
+
+  function onConfigure(event: Event): void {
+    const value: unknown = (event as CustomEvent<unknown>).detail;
+    if (typeof value !== "string") {
+      return;
+    }
+    document.removeEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
+    document.removeEventListener(FLUSH_EVENT, onFlush, true);
+    document.removeEventListener(RESET_EVENT, onReset, true);
+    QUEUE_EVENT = `${value}Queue`;
+    DOCUMENT_WRITE_EVENT = `${value}DocumentWrite`;
+    REGISTER_SECRET_ELEMENT_EVENT = `${value}RegisterSecretElement`;
+    FLUSH_EVENT = `${value}Flush`;
+    RESET_EVENT = `${value}Reset`;
+    document.addEventListener(FLUSH_EVENT, onFlush, true);
+    document.addEventListener(RESET_EVENT, onReset, true);
+    onRegisterSecretElementRequest();
+    clickListenerTracker.flushQueue(infiniteDeadline);
+  }
   function sendElementEvent(
     eventName: string,
     element: Element,
@@ -933,8 +948,15 @@ export const injected = (communicator?: {
 
     // ElementManager removes listeners itself on reset.
     if (communicator === undefined) {
+      const scope = globalThis as typeof globalThis & {
+        linkHintsInjected?: string;
+      };
+      if (scope.linkHintsInjected === BUILD_ID) {
+        delete scope.linkHintsInjected;
+      }
       document.removeEventListener(FLUSH_EVENT, onFlush, true);
       document.removeEventListener(RESET_EVENT, onReset, true);
+      document.removeEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
     }
 
     // Reset the overridden methods when the extension is shut down.
@@ -947,6 +969,10 @@ export const injected = (communicator?: {
   const target = communicator ?? document;
   target.addEventListener(FLUSH_EVENT, onFlush, true);
   target.addEventListener(RESET_EVENT, onReset, true);
+  if (communicator === undefined) {
+    document.addEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
+    sendWindowEvent(INJECTED_READY_EVENT, undefined);
+  }
 
   hookManager.hookInto(
     win.EventTarget.prototype,
@@ -969,6 +995,13 @@ export const injected = (communicator?: {
   // `document.write()` implicitly calls `document.open()` if needed.
   // (Internally, it doesn’t actually call the JavaScript `document.open()`).
   // Hook them, so we can re-apply the listeners.
+  function onDocumentWrite(): void {
+    if (communicator !== undefined) {
+      communicator.onInjectedMessage({ type: "DocumentWrite" });
+    } else {
+      sendWindowEvent(DOCUMENT_WRITE_EVENT, undefined);
+    }
+  }
   for (const method of ["open", "write"]) {
     hookManager.hookInto(
       // @ts-expect-error TypeScript thinks `win.Document` does not exist.
@@ -980,15 +1013,7 @@ export const injected = (communicator?: {
         // The original method removes the listeners on `window`, though, so we
         // have to run _before_ it, by using the pre-hook (below) instead.
       },
-      () => {
-        if (communicator !== undefined) {
-          communicator.onInjectedMessage({
-            type: "DocumentWrite",
-          });
-        } else {
-          sendWindowEvent(DOCUMENT_WRITE_EVENT, undefined);
-        }
-      }
+      onDocumentWrite
     );
   }
 
@@ -1010,9 +1035,3 @@ export const injected = (communicator?: {
 
   hookManager.conceal();
 };
-
-// Auto-execute when loaded as a MAIN-world content script.
-if (BROWSER !== "firefox") {
-  log("log", "Injecting injected.ts as a MAIN-world content script");
-  injected();
-}

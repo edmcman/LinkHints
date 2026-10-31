@@ -115,6 +115,117 @@ test.beforeEach(({ browserName }) => {
   );
 });
 
+test("detects click listeners attached before an element is inserted", async ({
+  context,
+}) => {
+  const server = await serve((_url, response) => {
+    response.end("<main></main>");
+  });
+  try {
+    const page = await context.newPage();
+    const background = await backgroundFor(context);
+    await prepare(page, background, `${server.url}/`);
+    await page.evaluate(() => {
+      const element = document.createElement("div");
+      element.textContent = "Clickable element";
+      element.addEventListener("click", () => {
+        location.hash = "clicked";
+      });
+      document.querySelector("main")?.append(element);
+    });
+    await activateHints(page);
+    const hints = page.locator("#__LinkHintsWebExt .hint:not(.shruggie)");
+    await expect(hints).toHaveCount(1);
+    const hint = await hints.first().textContent();
+    if (hint === null) {
+      throw new Error("No hint text");
+    }
+    await page.keyboard.type(hint);
+    await expect(page).toHaveURL(/#clicked$/);
+  } finally {
+    await server.close();
+  }
+});
+
+test.fixme(
+  "extension reload removes active hints and restores existing tabs",
+  async ({ context }) => {
+    const server = await serve((_url, response) => {
+      response.end('<a href="#target">Target</a>');
+    });
+    try {
+      const page = await context.newPage();
+      const background = await backgroundFor(context);
+      await prepare(page, background, `${server.url}/`);
+      await activateHints(page);
+      await background
+        .evaluate(() => {
+          const api = globalThis as unknown as {
+            chrome: { runtime: { reload: () => void } };
+          };
+          api.chrome.runtime.reload();
+        })
+        .catch(() => undefined);
+      await expect(page.locator("#__LinkHintsWebExt")).toHaveCount(0);
+      await activateHints(page);
+      await expect(
+        page.locator("#__LinkHintsWebExt .hint:not(.shruggie)")
+      ).toHaveCount(1);
+    } finally {
+      await server.close();
+    }
+  }
+);
+
+test("reinjecting content scripts does not duplicate hints", async ({
+  context,
+}) => {
+  const server = await serve((_url, response) => {
+    response.end('<a href="#target">Target</a>');
+  });
+  try {
+    const page = await context.newPage();
+    const background = await backgroundFor(context);
+    const url = `${server.url}/`;
+    await prepare(page, background, url);
+    await background.evaluate(async (pageUrl) => {
+      const api = globalThis as unknown as {
+        chrome: {
+          tabs: {
+            query: (query: { url: string }) => Promise<Array<{ id: number }>>;
+          };
+          scripting: {
+            executeScript: (details: {
+              target: { tabId: number; allFrames?: boolean };
+              files: Array<string>;
+              world?: "MAIN";
+            }) => Promise<unknown>;
+          };
+        };
+      };
+      const [tab] = await api.chrome.tabs.query({ url: pageUrl });
+      for (const [files, world, allFrames] of [
+        [["injected.js"], "MAIN", true],
+        [["browser-polyfill.js", "worker.js"], undefined, true],
+        [["browser-polyfill.js", "renderer.js"], undefined, false],
+      ] as Array<[Array<string>, "MAIN" | undefined, boolean]>) {
+        await api.chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames },
+          files,
+          world,
+        });
+      }
+    }, url);
+    await activateHints(page);
+    await expect(page.locator("#__LinkHintsWebExt")).toHaveCount(1);
+    await expect(
+      page.locator("#__LinkHintsWebExt .hint:not(.shruggie)")
+    ).toHaveCount(1);
+  } finally {
+    await server.close();
+  }
+});
+
 test("active hints survive a service worker restart", async ({ context }) => {
   const server = await serve((_url, response) => {
     response.end(

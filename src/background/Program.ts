@@ -256,6 +256,20 @@ export default class BackgroundProgram {
         "BackgroundProgram#onConnect"
       ),
       addListener(
+        browser.runtime.onInstalled,
+        () => {
+          if (BROWSER === "chrome") {
+            this.whenReady(() => {
+              fireAndForget(
+                browser.tabs.query({}).then(runContentScriptsInExistingTabs),
+                "BackgroundProgram#onInstalled->runContentScriptsInExistingTabs"
+              );
+            });
+          }
+        },
+        "BackgroundProgram#onInstalled"
+      ),
+      addListener(
         browser.tabs.onActivated,
         () => {
           this.whenReady(() => {
@@ -415,19 +429,9 @@ export default class BackgroundProgram {
       "BackgroundProgram#start->maybeReopenOptions"
     );
 
-    // Firefox automatically loads content scripts into existing tabs, while
-    // Chrome only automatically loads content scripts into _new_ tabs.
-    // Firefox requires a workaround (see renderer/Program.ts), while we
-    // manually load the content scripts into existing tabs in Chrome.
+    // Firefox content scripts can start before the background page is ready.
     if (BROWSER === "firefox") {
       firefoxWorkaround(tabs);
-    } else {
-      // temporarily disable
-      //await runContentScriptsInExistingTabs(tabs);
-      log(
-        "log",
-        "BackgroundProgram#start skipping runContentScriptsInExistingTabs TODO MV3"
-      );
     }
   }
 
@@ -2627,46 +2631,47 @@ function shouldCombineHintsForClick(element: ElementWithHint): boolean {
   return url !== undefined && !url.includes("#") && !hasClickListener;
 }
 
-// Intentionally unused for now (kept for future use). Avoid linter error.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function runContentScriptsInExistingTabs(
   tabs: Array<browser.tabs.Tab>
 ): Promise<void> {
   const manifest = browser.runtime.getManifest();
+  const { scripting } = (
+    globalThis as unknown as {
+      chrome: {
+        scripting: {
+          executeScript: (details: {
+            target: { tabId: number; allFrames?: boolean };
+            files: Array<string>;
+            world: "ISOLATED" | "MAIN";
+            injectImmediately: boolean;
+          }) => Promise<unknown>;
+        };
+      };
+    }
+  ).chrome;
 
-  const detailsList =
-    manifest.content_scripts === undefined
-      ? []
-      : manifest.content_scripts
-          .filter((script) => script.matches.includes("<all_urls>"))
-          .flatMap((script) =>
-            script.js === undefined
-              ? []
-              : script.js.map((file) => ({
-                  files: [file],
-                  allFrames: script.all_frames,
-                  matchAboutBlank: script.match_about_blank,
-                  runAt: script.run_at,
-                }))
-          );
-
-  // Run all script injections in parallel but don't return their results.
   await Promise.all(
-    tabs.flatMap((tab) =>
-      detailsList.map(async (details) => {
-        if (tab.id === undefined) {
-          return;
+    tabs.map(async (tab) => {
+      if (tab.id === undefined) {
+        return;
+      }
+      for (const script of manifest.content_scripts ?? []) {
+        if (!script.matches.includes("<all_urls>") || script.js === undefined) {
+          continue;
         }
         try {
-          await executeScriptInTab(tab.id, {
-            files: details.files,
-            runAt: details.runAt,
+          await scripting.executeScript({
+            target: { tabId: tab.id, allFrames: script.all_frames },
+            files: script.js,
+            world:
+              (script as { world?: "ISOLATED" | "MAIN" }).world ?? "ISOLATED",
+            injectImmediately: true,
           });
         } catch {
-          // Ignore failures for tabs where scripts can't be injected.
+          // Restricted pages and frames cannot be injected.
         }
-      })
-    )
+      }
+    })
   );
 }
 

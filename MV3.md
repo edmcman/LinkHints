@@ -1,7 +1,7 @@
 # MV3 Checklist
 
 - [ ] cnn.com problem reported by Michael Kutnetsov. Hints don't appear. Seems related to google pop-over.
-- [ ] service worker restart test
+- [x] service worker restart test
 - [x] Serialize storage
 - [x] Browser actions
 - [x] Remove DOM usage from background
@@ -13,21 +13,22 @@
 
 ## Minor
 
-- [ ] `window.program` not set to `BackgroundProgram` in MV3.
+- [x] Expose `BackgroundProgram` as `globalThis.program` for debugging.
 - [ ] `SelectorString` will not work for `BackgroundProgram` tweakables. Currently there are none.
 - [ ] Many timers are used in `BackgroundProgram`, but for very short periods. It seems unlikely these will cause issues with the hint process.
 
 ## Todo
 
 - [ ] Fix PROD behavior
-- [ ] Detect/handle extension removal (previously onDisconnect code)
+- [ ] Detect/handle extension removal (previously onDisconnect code).
+- [ ] Fix extension reload cleanup and existing-tab recovery; regression is marked fixme in `tests/serviceWorkerRestart.spec.ts`.
 - [ ] Ensure that we don't inject into existing tabs on service worker restart
 - [ ] Injecting into existing tabs does not seem to be working on chrome
 - [x] Decide how to handle builds since we can't currently build a single version in `compiled` that works with both chrome and firefox.
 - [x] Enable chromium playwright tests.
 - [ ] Restore test to use run-pty
-- [ ] Update comments in injected.ts
-- [ ] Remove polyfill
+- [x] Update comments in injected.ts
+- [ ] Decide minimum Chrome version before removing the polyfill (`browser` is native starting in Chrome 148; older supported versions need it).
 - [ ] Remove src/background/entry.ts after removing polyfill
 - [ ] Switch to chrome apis
 - [ ] Remove api compatibility shims

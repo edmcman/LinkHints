@@ -36,14 +36,17 @@ import {
   CLICKABLE_EVENT_PROPS,
   CLOSED_SHADOW_ROOT_CREATED_1_EVENT,
   CLOSED_SHADOW_ROOT_CREATED_2_EVENT,
+  CONFIGURE_INJECTED_EVENT,
   DOCUMENT_WRITE_EVENT,
   FLUSH_EVENT,
   FromInjected,
   injected,
+  INJECTED_READY_EVENT,
   OPEN_SHADOW_ROOT_CREATED_EVENT,
   QUEUE_EVENT,
   REGISTER_SECRET_ELEMENT_EVENT,
   RESET_EVENT,
+  secretPrefix,
 } from "./injected";
 
 const ATTRIBUTES_CLICKABLE = new Set<string>([
@@ -288,6 +291,9 @@ export default class ElementManager {
     this.addWindowListeners();
 
     this.injectScript();
+    if (BROWSER === "chrome") {
+      this.configureInjected();
+    }
 
     // Wait for tweakable values to load before starting the MutationObserver,
     // in case the user has changed `ATTRIBUTES_MUTATION`. After the
@@ -380,6 +386,12 @@ export default class ElementManager {
           REGISTER_SECRET_ELEMENT_EVENT,
           this.onRegisterSecretElement.bind(this),
           "ElementManager#onRegisterSecretElement"
+        ),
+        addEventListener(
+          window,
+          INJECTED_READY_EVENT,
+          this.configureInjected.bind(this),
+          "ElementManager#onInjectedReady"
         )
       );
     }
@@ -668,6 +680,12 @@ export default class ElementManager {
     } else {
       document.dispatchEvent(new CustomEvent(eventName));
     }
+  }
+
+  configureInjected(): void {
+    document.dispatchEvent(
+      new CustomEvent(CONFIGURE_INJECTED_EVENT, { detail: secretPrefix })
+    );
   }
 
   setShadowRoot(shadowRoot: ShadowRoot): void {

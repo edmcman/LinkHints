@@ -62,6 +62,8 @@ export default class RendererProgram {
 
   resets = new Resets();
 
+  port: browser.runtime.Port | undefined = undefined;
+
   shruggieElement: HTMLElement;
 
   statusElement: HTMLElement;
@@ -189,24 +191,27 @@ export default class RendererProgram {
       return;
     }
 
-    // In Chrome, content scripts continue to live after the extension has been
-    // disabled, uninstalled or reloaded. A way to detect this is to make a
-    // `Port` and listen for `onDisconnect`. Then one can run some cleanup to
-    // make the effectively disable the script.
-    // In Firefox, content scripts are nuked when uninstalling. `onDisconnect`
-    // never runs. Hopefully this changes some day, since we’d ideally want to
-    // clean up injected.ts. There does not seem to be any good way of running
-    // cleanups when a WebExtension is disabled in Firefox. See:
-    // <bugzil.la/1223425>
-    browser.runtime.connect().onDisconnect.addListener(() => {
-      log("log", "RendererProgram#onDisconnect MV3 FIXME");
-      // this.stop();
+    this.connect();
+  }
+
+  connect(): void {
+    if (this.port !== undefined) {
+      return;
+    }
+    const port = browser.runtime.connect();
+    this.port = port;
+    port.onDisconnect.addListener(() => {
+      if (this.port === port) {
+        this.port = undefined;
+      }
     });
   }
 
   stop(): void {
     log("log", "RendererProgram#stop");
     this.resets.reset();
+    this.port?.disconnect();
+    this.port = undefined;
     this.unrender();
   }
 
@@ -237,6 +242,7 @@ export default class RendererProgram {
 
     switch (message.type) {
       case "StateSync": {
+        this.connect();
         const newCSS = `${CSS}\n\n${message.css}`;
         const changedCSS = this.css.text !== newCSS;
         this.css.text = newCSS;

@@ -46,8 +46,7 @@ export default {
     webExtBaseName: `link_hints-${VERSION}`,
     geckoId: "linkhints@lydell.github.io",
   },
-  // XXX MV3 FIXME
-  prod: false, //currentBrowser !== undefined,
+  prod: currentBrowser !== undefined && process.env.LINKHINTS_DEV !== "1",
   browser: currentBrowser,
   src: "src",
   compiled:
@@ -83,7 +82,7 @@ export default {
     output: "worker.js",
   },
   injected: {
-    input: "worker/injected.ts",
+    input: "worker/injected-main.ts",
     output: "injected.js",
   },
   renderer: {
