@@ -1,7 +1,13 @@
 import { createServer } from "http";
 import type { AddressInfo } from "net";
 
-import { activateHints, expect, test } from "./fixture";
+import {
+  activateHints,
+  attachConsoleLogs,
+  expect,
+  startConsoleCapture,
+  test,
+} from "./fixture";
 
 test("detects a click listener attached before insertion", async ({
   context,
@@ -18,6 +24,7 @@ test("detects a click listener attached before insertion", async ({
   });
   try {
     const page = await context.newPage();
+    const logs = startConsoleCapture(page);
     await page.goto(
       `http://127.0.0.1:${(server.address() as AddressInfo).port}/`
     );
@@ -41,7 +48,34 @@ test("detects a click listener attached before insertion", async ({
     await page.waitForTimeout(500);
     await activateHints(page);
     const hint = page.locator("#__LinkHintsWebExt .hint:not(.shruggie)");
-    await expect(hint).toHaveCount(1);
+    // This has failed in CI without reproducing locally: record the state that
+    // distinguishes "main-world script never ran" from "listener not seen".
+    await expect(hint)
+      .toHaveCount(1)
+      .catch(async (error: unknown) => {
+        const diagnostics = await page.evaluate(() => {
+          const scope = window as unknown as Record<string, unknown>;
+          return {
+            readyState: document.readyState,
+            extensionAlive: typeof scope.linkHintsExtensionAlive,
+            injectedLoaded: typeof scope.linkHintsInjected,
+            addEventListenerName: (
+              Reflect.getOwnPropertyDescriptor(
+                EventTarget.prototype,
+                "addEventListener"
+              )?.value as { name?: string } | undefined
+            )?.name,
+            clickable: document.querySelector("main")?.innerHTML,
+            containers: document.querySelectorAll("#__LinkHintsWebExt").length,
+          };
+        });
+        console.log(
+          "firefoxMainWorld diagnostics:",
+          JSON.stringify(diagnostics, null, 2)
+        );
+        await attachConsoleLogs("console-logs-firefox-main-world", logs);
+        throw error;
+      });
     const text = await hint.textContent();
     if (text === null) {
       throw new Error("Missing hint");
