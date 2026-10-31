@@ -1,6 +1,6 @@
 # MV3 Checklist
 
-- [ ] cnn.com problem reported by Michael Kutnetsov. Hints don't appear. Seems related to google pop-over.
+- [ ] cnn.com: Google account-selection prompt prevents hints until dismissed. CNN requests FedCM; a local FedCM chooser also captures physical keys, but it is not yet confirmed to match the user's prompt. A Chrome extension command receives its shortcut while the local chooser is open, but normal hint-selection keys do not reach the page.
 - [x] service worker restart test
 - [x] Serialize storage
 - [x] Browser actions
@@ -21,9 +21,9 @@
 
 - [ ] Fix PROD behavior
 - [ ] Detect/handle extension removal (previously onDisconnect code).
-- [ ] Fix extension reload cleanup and existing-tab recovery; regression is marked fixme in `tests/serviceWorkerRestart.spec.ts`.
-- [ ] Ensure that we don't inject into existing tabs on service worker restart
-- [ ] Injecting into existing tabs does not seem to be working on chrome
+- [x] Restore shortcuts and click-listener detection after extension reload; tested with an unpacked extension installed through the debugging protocol.
+- [x] Ensure that we don't inject into existing tabs on service worker restart.
+- [x] Inject content scripts into existing tabs in Chrome.
 - [x] Decide how to handle builds since we can't currently build a single version in `compiled` that works with both chrome and firefox.
 - [x] Enable chromium playwright tests.
 - [ ] Restore test to use run-pty

@@ -577,6 +577,12 @@ export default class WorkerProgram {
   // (at least for now) the extension shortcuts always do their thing (making it
   // impossible to trigger a site shortcut using the same keys).
   onKeydown(event: KeyboardEvent): void {
+    try {
+      browser.runtime.getManifest();
+    } catch {
+      this.stop();
+      return;
+    }
     if (!event.isTrusted) {
       log("log", "WorkerProgram#onKeydown", "ignoring untrusted event", event);
       return;

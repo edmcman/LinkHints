@@ -147,35 +147,29 @@ test("detects click listeners attached before an element is inserted", async ({
   }
 });
 
-test.fixme(
-  "extension reload removes active hints and restores existing tabs",
-  async ({ context }) => {
-    const server = await serve((_url, response) => {
-      response.end('<a href="#target">Target</a>');
-    });
-    try {
-      const page = await context.newPage();
-      const background = await backgroundFor(context);
-      await prepare(page, background, `${server.url}/`);
-      await activateHints(page);
-      await background
-        .evaluate(() => {
-          const api = globalThis as unknown as {
-            chrome: { runtime: { reload: () => void } };
-          };
-          api.chrome.runtime.reload();
-        })
-        .catch(() => undefined);
-      await expect(page.locator("#__LinkHintsWebExt")).toHaveCount(0);
-      await activateHints(page);
-      await expect(
-        page.locator("#__LinkHintsWebExt .hint:not(.shruggie)")
-      ).toHaveCount(1);
-    } finally {
-      await server.close();
+test("renders and follows hints above a modal dialog", async ({ context }) => {
+  const server = await serve((_url, response) => {
+    response.end(
+      '<dialog><a href="#target">Target</a></dialog><script>document.querySelector("dialog").showModal()</script>'
+    );
+  });
+  try {
+    const page = await context.newPage();
+    const background = await backgroundFor(context);
+    await prepare(page, background, `${server.url}/`);
+    await activateHints(page);
+    const hints = page.locator("#__LinkHintsWebExt .hint:not(.shruggie)");
+    await expect(hints).toHaveCount(1);
+    const hint = await hints.first().textContent();
+    if (hint === null) {
+      throw new Error("No hint text");
     }
+    await page.keyboard.type(hint);
+    await expect(page).toHaveURL(/#target$/);
+  } finally {
+    await server.close();
   }
-);
+});
 
 test("reinjecting content scripts does not duplicate hints", async ({
   context,

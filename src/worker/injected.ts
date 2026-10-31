@@ -65,7 +65,7 @@ export const injected = (communicator?: {
     listener: () => unknown,
     _?: true
   ) => unknown;
-}): void => {
+}): (() => void) => {
   log("log", "injected() called");
 
   // Refers to the page `window` both in Firefox and other browsers.
@@ -698,7 +698,6 @@ export const injected = (communicator?: {
     if (typeof value !== "string") {
       return;
     }
-    document.removeEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
     document.removeEventListener(FLUSH_EVENT, onFlush, true);
     document.removeEventListener(RESET_EVENT, onReset, true);
     QUEUE_EVENT = `${value}Queue`;
@@ -948,12 +947,6 @@ export const injected = (communicator?: {
 
     // ElementManager removes listeners itself on reset.
     if (communicator === undefined) {
-      const scope = globalThis as typeof globalThis & {
-        linkHintsInjected?: string;
-      };
-      if (scope.linkHintsInjected === BUILD_ID) {
-        delete scope.linkHintsInjected;
-      }
       document.removeEventListener(FLUSH_EVENT, onFlush, true);
       document.removeEventListener(RESET_EVENT, onReset, true);
       document.removeEventListener(CONFIGURE_INJECTED_EVENT, onConfigure, true);
@@ -1034,4 +1027,5 @@ export const injected = (communicator?: {
   );
 
   hookManager.conceal();
+  return onReset;
 };
