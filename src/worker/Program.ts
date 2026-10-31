@@ -87,6 +87,8 @@ export default class WorkerProgram {
 
   oneTimeWindowMessageToken: string | undefined = undefined;
 
+  port: browser.runtime.Port | undefined = undefined;
+
   mac = false;
 
   suppressNextKeyup: { key: string; code: string } | undefined = undefined;
@@ -120,15 +122,27 @@ export default class WorkerProgram {
     } catch {
       return;
     }
-    browser.runtime.connect().onDisconnect.addListener(() => {
-      log("log", "WorkerProgram#onDisconnect MV3 FIXME");
-      // this.stop();
+    this.connect();
+  }
+
+  connect(): void {
+    if (this.port !== undefined) {
+      return;
+    }
+    const port = browser.runtime.connect();
+    this.port = port;
+    port.onDisconnect.addListener(() => {
+      if (this.port === port) {
+        this.port = undefined;
+      }
     });
   }
 
   stop(): void {
     log("log", "WorkerProgram#stop");
     this.resets.reset();
+    this.port?.disconnect();
+    this.port = undefined;
     this.elementManager.stop();
     this.oneTimeWindowMessageToken = undefined;
     this.suppressNextKeyup = undefined;
@@ -198,6 +212,7 @@ export default class WorkerProgram {
 
     switch (message.type) {
       case "StateSync":
+        this.connect();
         log.level = message.logLevel;
         this.isPinned = message.isPinned;
         this.keyboardShortcuts = message.keyboardShortcuts;

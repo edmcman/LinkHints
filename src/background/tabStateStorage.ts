@@ -1,104 +1,68 @@
-import type {
-  KeyboardModeBackground,
-  KeyboardModeWorker,
-} from "../shared/keyboard";
 import { log } from "../shared/main";
-import type { Perf } from "../shared/perf";
 
-// Minimal serializable tab state shape
-export type SerializedTabState = {
-  perf?: Perf;
-  isOptionsPage?: boolean;
-  isPinned?: boolean;
-  keyboardMode?: KeyboardModeBackground | KeyboardModeWorker; // should already be a plain object
+const PREFIX = "tabState:";
+
+type Storage = {
+  get: (keys: null) => Promise<Record<string, unknown>>;
+  set: (items: Record<string, unknown>) => Promise<void>;
+  remove: (key: string) => Promise<void>;
 };
 
-type MinimalTabState = {
-  perf?: Perf;
-  isOptionsPage?: boolean;
-  isPinned?: boolean;
-  keyboardMode?: KeyboardModeBackground | KeyboardModeWorker;
-};
-
-const STORAGE_KEY = "tabStates";
-
-export async function restoreAllTabStates(): Promise<
-  Record<string, SerializedTabState>
-> {
-  try {
-    const stored = (await browser.storage.local.get(STORAGE_KEY)) as
-      | Record<string, unknown>
-      | undefined;
-    const tabStates =
-      stored !== undefined && stored !== null ? stored[STORAGE_KEY] : undefined;
-    if (tabStates !== undefined && typeof tabStates === "object") {
-      return tabStates as Record<string, SerializedTabState>;
-    }
-  } catch (error) {
-    // If reading fails, keep going without restored data.
-    log("error", "restoreAllTabStates: failed to read storage", error);
-  }
-  return {};
+// Chrome's session storage survives service worker termination but is cleared
+// on browser restart. Firefox uses a persistent background page instead.
+function storage(): Storage | undefined {
+  return (
+    globalThis as unknown as { chrome?: { storage?: { session?: Storage } } }
+  ).chrome?.storage?.session;
 }
 
-export function serializeTabState(
-  _tabId: number,
-  ts: MinimalTabState
-): SerializedTabState {
-  return {
-    perf: ts.perf,
-    isOptionsPage: ts.isOptionsPage,
-    isPinned: ts.isPinned,
-    keyboardMode: ts.keyboardMode,
-    // We do not serialize the TimeTracker instance itself. If callers want
-    // durations they must export them explicitly.
-  };
-}
+const pending = new Map<number, Promise<void>>();
 
-export function deserializeTabState(
-  serial: SerializedTabState
-): Partial<MinimalTabState> {
-  return serial;
-}
-
-export async function saveTabState(
+function write(
   tabId: number,
-  serial: SerializedTabState
-): Promise<void> {
+  operation: (area: Storage) => Promise<void>
+): void {
+  const area = storage();
+  if (area === undefined) {
+    return;
+  }
+  const previous = pending.get(tabId) ?? Promise.resolve();
+  const next = previous
+    .then(() => operation(area))
+    .catch((error) => {
+      log("error", "tabStateStorage: write failed", error);
+    });
+  pending.set(tabId, next);
+  void next.then(() => {
+    if (pending.get(tabId) === next) {
+      pending.delete(tabId);
+    }
+  });
+}
+
+export async function restoreAllTabStates(): Promise<Record<string, unknown>> {
+  const area = storage();
+  if (area === undefined) {
+    return {};
+  }
   try {
-    const key = STORAGE_KEY;
-    const stored = (await browser.storage.local.get(key)) as
-      | Record<string, unknown>
-      | undefined;
-    const maybeMap =
-      stored !== undefined && stored !== null ? stored[key] : undefined;
-    const map = maybeMap as Record<string, SerializedTabState> | undefined;
-    const next =
-      map === undefined
-        ? { [String(tabId)]: serial }
-        : { ...map, [String(tabId)]: serial };
-    await browser.storage.local.set({ [key]: next });
+    const entries = await area.get(null);
+    return Object.fromEntries(
+      Object.entries(entries)
+        .filter(([key]) => key.startsWith(PREFIX))
+        .map(([key, value]) => [key.slice(PREFIX.length), value])
+    );
   } catch (error) {
-    log("error", "saveTabState: failed to write storage", error);
+    log("error", "tabStateStorage: read failed", error);
+    return {};
   }
 }
 
-export async function removeTabState(tabId: number): Promise<void> {
-  try {
-    const key = STORAGE_KEY;
-    const stored = (await browser.storage.local.get(key)) as
-      | Record<string, unknown>
-      | undefined;
-    const maybeMap =
-      stored !== undefined && stored !== null ? stored[key] : undefined;
-    const map = maybeMap as Record<string, SerializedTabState> | undefined;
-    if (map === undefined) {
-      return;
-    }
-    const next = { ...map };
-    delete next[String(tabId)];
-    await browser.storage.local.set({ [key]: next });
-  } catch (error) {
-    log("error", "removeTabState: failed to modify storage", error);
-  }
+export function saveTabState(tabId: number, state: unknown): void {
+  const snapshot = JSON.parse(JSON.stringify(state)) as unknown;
+  write(tabId, (area) => area.set({ [`${PREFIX}${tabId}`]: snapshot }));
+}
+
+export function removeTabState(tabId: number): void {
+  write(tabId, (area) => area.remove(`${PREFIX}${tabId}`));
 }

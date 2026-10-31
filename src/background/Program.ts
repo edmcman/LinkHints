@@ -70,11 +70,9 @@ import {
 } from "../shared/perf";
 import { bool, tweakable, unsignedInt } from "../shared/tweakable";
 import {
-  deserializeTabState,
   removeTabState,
   restoreAllTabStates,
   saveTabState,
-  serializeTabState,
 } from "./tabStateStorage";
 
 type MessageInfo = {
@@ -206,6 +204,25 @@ export default class BackgroundProgram {
 
   resets = new Resets();
 
+  ready = false;
+
+  pendingEvents: Array<() => void> = [];
+
+  whenReady(event: () => void): void {
+    if (this.ready) {
+      event();
+    } else {
+      this.pendingEvents.push(event);
+    }
+  }
+
+  checkpoint(tabId: number): void {
+    const state = this.tabState.get(tabId);
+    if (state !== undefined) {
+      saveTabState(tabId, state);
+    }
+  }
+
   constructor() {
     const mac = false;
     const defaults = getDefaults({ mac });
@@ -226,13 +243,55 @@ export default class BackgroundProgram {
     this.resets.add(
       addListener(
         browser.runtime.onMessage,
-        this.onMessage.bind(this),
+        (message: ToBackground, sender) => {
+          this.whenReady(() => {
+            this.onMessage(message, sender);
+          });
+        },
         "BackgroundProgram#onMessage"
       ),
       addListener(
         browser.runtime.onConnect,
         this.onConnect.bind(this),
         "BackgroundProgram#onConnect"
+      ),
+      addListener(
+        browser.tabs.onActivated,
+        () => {
+          this.whenReady(() => {
+            this.onTabActivated();
+          });
+        },
+        "BackgroundProgram#onTabActivated"
+      ),
+      addListener(
+        browser.tabs.onCreated,
+        (tab) => {
+          this.whenReady(() => {
+            this.onTabCreated(tab);
+          });
+        },
+        "BackgroundProgram#onTabCreated"
+      ),
+      addListener(
+        browser.tabs.onUpdated,
+        (tabId, changeInfo) => {
+          this.whenReady(() => {
+            this.onTabUpdated(tabId, changeInfo);
+            this.checkpoint(tabId);
+          });
+        },
+        "BackgroundProgram#onTabUpdated",
+        BROWSER === "firefox" ? { properties: ["status", "pinned"] } : undefined
+      ),
+      addListener(
+        browser.tabs.onRemoved,
+        (tabId) => {
+          this.whenReady(() => {
+            this.onTabRemoved(tabId);
+          });
+        },
+        "BackgroundProgram#onTabRemoved"
       )
     );
   }
@@ -260,49 +319,76 @@ export default class BackgroundProgram {
       for (const [tabIdStr, serial] of Object.entries(saved)) {
         const tabIdNum = Number(tabIdStr);
         if (openTabIds.has(tabIdNum)) {
-          // Hydrate a fresh TabState; do not restore DOM-dependent hints state.
-          const tabState = makeEmptyTabState(tabIdNum);
-          Object.assign(tabState, deserializeTabState(serial));
-          tabState.hintsState = { type: "Idle", highlighted: [] };
+          if (!isSavedTabState(serial)) {
+            removeTabState(tabIdNum);
+            this.tabState.set(tabIdNum, makeEmptyTabState(tabIdNum));
+            this.sendRendererMessage({ type: "Unrender" }, { tabId: tabIdNum });
+            continue;
+          }
+          const tabState = serial;
+          if (tabState.hintsState.type !== "Idle") {
+            tabState.hintsState.time = Object.assign(
+              new TimeTracker(),
+              tabState.hintsState.time
+            );
+          }
+          tabState.isPinned =
+            tabs.find((tab) => tab.id === tabIdNum)?.pinned ?? false;
           this.tabState.set(tabIdNum, tabState);
         } else {
           // Clean up stale entry from storage
-          fireAndForget(
-            removeTabState(tabIdNum),
-            "BackgroundProgram#start->removeStaleTabState",
-            tabIdNum
-          );
+          removeTabState(tabIdNum);
         }
       }
     } catch (error) {
       log("error", "BackgroundProgram#start->restoreAllTabStates", error);
     }
 
-    // See addEarlyListeners() also.
-    this.resets.add(
-      addListener(
-        browser.tabs.onActivated,
-        this.onTabActivated.bind(this),
-        "BackgroundProgram#onTabActivated"
-      ),
-      addListener(
-        browser.tabs.onCreated,
-        this.onTabCreated.bind(this),
-        "BackgroundProgram#onTabCreated"
-      ),
-      addListener(
-        browser.tabs.onUpdated,
-        this.onTabUpdated.bind(this),
-        "BackgroundProgram#onTabUpdated",
-        // Chrome doesn’t support filters.
-        BROWSER === "firefox" ? { properties: ["status", "pinned"] } : undefined
-      ),
-      addListener(
-        browser.tabs.onRemoved,
-        this.onTabRemoved.bind(this),
-        "BackgroundProgram#onTabRemoved"
-      )
-    );
+    for (const [tabId, state] of this.tabState) {
+      this.sendWorkerMessage(
+        this.makeWorkerState(state, { refreshToken: false }),
+        { tabId, frameId: "all_frames" }
+      );
+      if (state.hintsState.type === "Collecting") {
+        this.enterHintsMode({
+          tabId,
+          timestamp: Date.now(),
+          mode: state.hintsState.mode,
+        });
+      } else if (state.hintsState.type === "Hinting") {
+        state.hintsState.updateState = {
+          type: "WaitingForTimeout",
+          lastUpdateStartTimestamp: 0,
+        };
+        this.setTimeout(tabId, 0);
+      }
+      this.setTimeout(tabId, 0);
+      if (state.keyboardMode.type === "PreventOverTyping") {
+        this.setTimeout(
+          tabId,
+          Math.max(
+            0,
+            state.keyboardMode.sinceTimestamp +
+              this.options.values.overTypingDuration -
+              Date.now()
+          )
+        );
+      }
+      for (const { sinceTimestamp } of state.hintsState.highlighted) {
+        this.setTimeout(
+          tabId,
+          Math.max(
+            0,
+            sinceTimestamp + t.MATCH_HIGHLIGHT_DURATION.value - Date.now()
+          )
+        );
+      }
+      this.checkpoint(tabId);
+    }
+    this.ready = true;
+    for (const event of this.pendingEvents.splice(0)) {
+      event();
+    }
 
     for (const tab of tabs) {
       if (tab.id !== undefined) {
@@ -505,7 +591,11 @@ export default class BackgroundProgram {
       case "FromOptions":
         if (info !== undefined) {
           fireAndForget(
-            this.onOptionsMessage(message.message, info, tabState),
+            this.onOptionsMessage(message.message, info, tabState).then(() => {
+              for (const tabId of this.tabState.keys()) {
+                this.checkpoint(tabId);
+              }
+            }),
             "BackgroundProgram#onOptionsMessage",
             message.message,
             info
@@ -520,12 +610,7 @@ export default class BackgroundProgram {
       const { tabId } = info;
       const ts = this.tabState.get(tabId);
       if (ts !== undefined) {
-        const serial = serializeTabState(tabId, ts);
-        fireAndForget(
-          saveTabState(tabId, serial),
-          "BackgroundProgram#onMessage->saveTabState",
-          tabId
-        );
+        this.checkpoint(tabId);
       }
     }
   }
@@ -536,7 +621,10 @@ export default class BackgroundProgram {
       if (info !== undefined) {
         // A frame was removed. If in hints mode, hide all hints for elements in
         // that frame.
-        this.hideElements(info);
+        this.whenReady(() => {
+          this.hideElements(info);
+          this.checkpoint(info.tabId);
+        });
       }
     });
   }
@@ -550,6 +638,12 @@ export default class BackgroundProgram {
 
     switch (message.type) {
       case "WorkerScriptAdded":
+        if (
+          info.frameId === TOP_FRAME_ID &&
+          tabState.hintsState.type !== "Idle"
+        ) {
+          this.exitHintsMode({ tabId: info.tabId, sendMessages: false });
+        }
         this.sendWorkerMessage(
           // Make sure that the added worker script gets the same token as all
           // other frames in the page. Otherwise the first hints mode won't
@@ -788,6 +882,7 @@ export default class BackgroundProgram {
     setTimeout(() => {
       try {
         this.onTimeout(tabId);
+        this.checkpoint(tabId);
       } catch (error) {
         log("error", "BackgroundProgram#onTimeout", error, tabId);
       }
@@ -2072,6 +2167,7 @@ export default class BackgroundProgram {
   deleteTabState(tabId: number): void {
     const tabState = this.tabState.get(tabId);
     if (tabState === undefined) {
+      removeTabState(tabId);
       return;
     }
 
@@ -2087,11 +2183,7 @@ export default class BackgroundProgram {
     this.updateOptionsPageData();
 
     // Remove stored representation for this tab
-    fireAndForget(
-      removeTabState(tabId),
-      "BackgroundProgram#deleteTabState->removeTabState",
-      tabId
-    );
+    removeTabState(tabId);
   }
 
   async updateIcon(tabId: number): Promise<void> {
@@ -2402,6 +2494,31 @@ export default class BackgroundProgram {
       }
     }
   }
+}
+
+function isSavedTabState(value: unknown): value is TabState {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const state = value as Partial<TabState>;
+  const hints = state.hintsState;
+  return (
+    typeof state.isPinned === "boolean" &&
+    typeof state.isOptionsPage === "boolean" &&
+    Array.isArray(state.perf) &&
+    typeof state.keyboardMode === "object" &&
+    state.keyboardMode !== null &&
+    typeof state.keyboardMode.type === "string" &&
+    typeof hints === "object" &&
+    hints !== null &&
+    Array.isArray(hints.highlighted) &&
+    (hints.type === "Idle" ||
+      ((hints.type === "Collecting" || hints.type === "Hinting") &&
+        typeof hints.time === "object" &&
+        hints.time !== null &&
+        Array.isArray(hints.time._durations) &&
+        (hints.type !== "Hinting" || Array.isArray(hints.elementsWithHints))))
+  );
 }
 
 function makeEmptyTabState(tabId: number | undefined): TabState {
