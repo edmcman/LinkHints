@@ -13,7 +13,30 @@ if (process.env.BROWSER === undefined) {
 const compiledDir = `compiled-${process.env.BROWSER}`;
 const extensionPath = path.resolve(__dirname, "..", compiledDir);
 
-const { test, expect } = createFixture(extensionPath);
+const { test: extensionTest, expect } = createFixture(extensionPath);
+
+// playwright-webextext closes the default `context` instead of the persistent
+// one it launched, leaking a browser per test (and eventually exhausting
+// inotify instances).
+const test =
+  process.env.BROWSER === "chrome"
+    ? extensionTest.extend({
+        context: async ({ playwright }, use) => {
+          const context = await playwright.chromium.launchPersistentContext(
+            "",
+            {
+              headless: false,
+              args: [
+                `--disable-extensions-except=${extensionPath}`,
+                `--load-extension=${extensionPath}`,
+              ],
+            }
+          );
+          await use(context);
+          await context.close();
+        },
+      })
+    : extensionTest;
 
 type HtmlServer = {
   url: (file: string, crossOrigin?: boolean) => string;
