@@ -1685,13 +1685,15 @@ export default class BackgroundProgram {
         // Also, hide the backdrop of Link Hints’ container (it is a popover),
         // for sites with styles like `::backdrop { background-color: rgba(0, 0, 0, 0.2) }`
         fireAndForget(
-          browser.scripting.insertCSS({
-            target: { tabId: info.tabId, frameIds: [TOP_FRAME_ID] },
-            css: `${`#${CONTAINER_ID}`.repeat(
-              255
-            )} { display: block !important; &::backdrop { display: none !important; } }`,
-            origin: "USER",
-          }),
+          browser.scripting
+            .insertCSS({
+              target: { tabId: info.tabId, frameIds: [TOP_FRAME_ID] },
+              css: `${`#${CONTAINER_ID}`.repeat(
+                255
+              )} { display: block !important; &::backdrop { display: none !important; } }`,
+              origin: "USER",
+            })
+            .catch(ignoreGoneTab),
           "BackgroundProgram#onRendererMessage",
           "Failed to insert adblock workaround CSS",
           message,
@@ -2223,7 +2225,7 @@ export default class BackgroundProgram {
           text: getBadgeText(hintsState),
           tabId,
         })
-        .catch(ignoreClosedTab),
+        .catch(ignoreGoneTab),
       "BackgroundProgram#updateBadge->setBadgeText"
     );
   }
@@ -2524,12 +2526,16 @@ function isSavedTabState(value: unknown): value is TabState {
   );
 }
 
-// A tab that is closing rejects per-tab calls a few milliseconds before
-// `tabs.onRemoved` is delivered, so there is no way to know beforehand.
-function ignoreClosedTab(error: unknown): void {
+// Per-tab calls are asynchronous, so the tab can be gone by the time they run:
+// a closing tab rejects them a few milliseconds before `tabs.onRemoved` is
+// delivered, and a tab that navigated to a `chrome://` page can no longer be
+// scripted. There is no way to know beforehand.
+function ignoreGoneTab(error: unknown): void {
   if (
     !(error instanceof Error) ||
-    !/No tab with id|Invalid tab ID/.test(error.message)
+    !/No tab with id|Invalid tab ID|Cannot access a chrome:\/\/ URL/.test(
+      error.message
+    )
   ) {
     throw error;
   }
@@ -2560,6 +2566,7 @@ function makeEmptyTabState(tabId: number | undefined): TabState {
       .then((tab) => {
         tabState.isPinned = tab.pinned;
       })
+      .catch(ignoreGoneTab)
       .catch((error) => {
         log("error", "makeEmptyTabState", `Failed to get tab ${tabId}.`, error);
       });
