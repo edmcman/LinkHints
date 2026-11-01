@@ -105,19 +105,15 @@ export function deserializeShortcut(
   shortcutString: string
 ): Record<string, unknown> {
   const parts = shortcutString.split(SHORTCUT_SEPARATOR);
-  const lastIndex = parts.length - 1;
-  return parts.reduce(
-    (shortcut, part, index) =>
-      index === lastIndex
-        ? // If the last part is empty, we’re deserializing a shortcut like `alt--`.
-          { ...shortcut, key: part === "" ? SHORTCUT_SEPARATOR : part }
-        : // Ignore empty parts, such as in `alt--x`.
-        part !== ""
-        ? // Modifiers.
-          { ...shortcut, [part]: true }
-        : shortcut,
-    { ...EMPTY_SHORTCUT }
-  );
+  const key = parts.pop() ?? "";
+  return {
+    ...EMPTY_SHORTCUT,
+    ...Object.fromEntries(
+      parts.filter((part) => part !== "").map((part) => [part, true])
+    ),
+    // An empty final part represents the key in shortcuts like `alt--`.
+    key: key === "" ? SHORTCUT_SEPARATOR : key,
+  };
 }
 
 export type KeyboardMapping = ReturnType<typeof KeyboardMapping>;

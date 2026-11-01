@@ -382,35 +382,36 @@ export function diffOptions(
   ]);
 
   for (const key of allKeys) {
-    if (
-      Object.prototype.hasOwnProperty.call(defaults, key) &&
-      !Object.prototype.hasOwnProperty.call(fullOptions, key)
-    ) {
+    const hasDefault = Object.prototype.hasOwnProperty.call(defaults, key);
+    const hasFull = Object.prototype.hasOwnProperty.call(fullOptions, key);
+    const hasSaved = Object.prototype.hasOwnProperty.call(saved, key);
+
+    if (hasDefault && !hasFull) {
       // Default deleted; only set if needed.
       if (saved[key] !== null) {
         // Mark as deleted.
         optionsToSet[key] = null;
       }
-    } else if (
-      !Object.prototype.hasOwnProperty.call(defaults, key) &&
-      Object.prototype.hasOwnProperty.call(fullOptions, key)
-    ) {
+      continue;
+    }
+
+    if (!hasDefault && hasFull) {
       // Added new; only set if needed.
       if (!deepEqual(fullOptions[key], saved[key])) {
         optionsToSet[key] = fullOptions[key];
       }
-    } else if (deepEqual(fullOptions[key], defaults[key])) {
-      // Option is the same as default; remove if needed.
-      if (Object.prototype.hasOwnProperty.call(saved, key)) {
+      continue;
+    }
+
+    if (deepEqual(fullOptions[key], defaults[key]) || !hasFull) {
+      // Defaults and deleted custom options need no stored override.
+      if (hasSaved) {
         keysToRemove.push(key);
       }
-    } else if (
-      Object.prototype.hasOwnProperty.call(saved, key) &&
-      !Object.prototype.hasOwnProperty.call(fullOptions, key)
-    ) {
-      // Extra deleted; remove.
-      keysToRemove.push(key);
-    } else if (!deepEqual(fullOptions[key], saved[key])) {
+      continue;
+    }
+
+    if (!deepEqual(fullOptions[key], saved[key])) {
       // Set user option, if needed.
       optionsToSet[key] = fullOptions[key];
     }

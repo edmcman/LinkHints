@@ -1215,22 +1215,15 @@ export default class BackgroundProgram {
       }
 
       case "BackgroundTab":
-        if (url === undefined) {
-          log("error", "Cannot open background tab due to missing URL", match);
-          return true;
-        }
-        this.openNewTab({
-          url,
-          elementIndex: match.frame.index,
-          tabId,
-          frameId: match.frame.id,
-          foreground: false,
-        });
-        return true;
-
       case "ForegroundTab":
         if (url === undefined) {
-          log("error", "Cannot open foreground tab due to missing URL", match);
+          log(
+            "error",
+            `Cannot open ${
+              mode === "ForegroundTab" ? "foreground" : "background"
+            } tab due to missing URL`,
+            match
+          );
           return true;
         }
         this.openNewTab({
@@ -1238,7 +1231,7 @@ export default class BackgroundProgram {
           elementIndex: match.frame.index,
           tabId,
           frameId: match.frame.id,
-          foreground: true,
+          foreground: mode === "ForegroundTab",
         });
         return true;
 
