@@ -170,3 +170,45 @@ test("removed collecting frames settle once and replaced ports cannot settle the
   expect(pending.pendingFrames.collecting).toBe(1);
   expect(finishes).toBe(1);
 });
+
+test("saves merge current sync storage, including newly added and deleted values", async () => {
+  const program = new BackgroundProgram();
+  await program.saveOptions({ autoActivate: false });
+  store.css = "synced{}";
+  delete store.autoActivate;
+  await program.saveOptions({ overTypingDuration: 900 });
+  expect(program.options.values.css).toBe("synced{}");
+  expect(program.options.values.autoActivate).toBe(true);
+  expect(program.options.values.overTypingDuration).toBe(900);
+});
+
+test("a save can repair an invalid synced value without losing other synced options", async () => {
+  const program = new BackgroundProgram();
+  store.chars = "";
+  store.css = "synced{}";
+  await program.saveOptions({ chars: "ab" });
+  expect(program.options.errors).toEqual([]);
+  expect(program.options.values.chars).toBe("ab");
+  expect(program.options.values.css).toBe("synced{}");
+});
+
+test("frame tokens belong to their tab and new frames reuse that tab's token", () => {
+  const program = new BackgroundProgram();
+  const state: Parameters<typeof program.makeWorkerState>[0] = {
+    hintsState: { type: "Idle", highlighted: [] },
+    keyboardMode: { type: "FromHintsState" },
+    perf: [],
+    isOptionsPage: false,
+    isPinned: false,
+  };
+  const other = { ...state };
+  const first = program.makeWorkerState(state);
+  program.makeWorkerState(other);
+  const added = program.makeWorkerState(state, { refreshToken: false });
+  expect(added).toEqual(first);
+  program.makeWorkerState(other);
+  expect(program.makeWorkerState(state, { refreshToken: false })).toEqual(
+    first
+  );
+  expect(program.makeWorkerState(state)).not.toEqual(first);
+});

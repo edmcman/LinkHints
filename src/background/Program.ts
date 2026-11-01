@@ -24,6 +24,7 @@ import {
   addListener,
   CONTAINER_ID,
   decode,
+  deepEqual,
   fireAndForget,
   isMixedCase,
   log,
@@ -46,6 +47,7 @@ import type {
   ToWorker,
 } from "../shared/messages";
 import {
+  DEBUG_PREFIX,
   diffOptions,
   flattenOptions,
   getDefaults,
@@ -200,7 +202,7 @@ export default class BackgroundProgram {
 
   restoredTabsPerf: TabsPerf = {};
 
-  oneTimeWindowMessageToken: string = makeRandomToken();
+  frameTokens = new WeakMap<TabState, string>();
 
   resets = new Resets();
 
@@ -249,6 +251,28 @@ export default class BackgroundProgram {
           });
         },
         "BackgroundProgram#onMessage"
+      ),
+      addListener(
+        browser.storage.onChanged,
+        (changes, area) => {
+          if (
+            area === "sync" &&
+            Object.keys(changes).some((key) => !key.startsWith(DEBUG_PREFIX))
+          ) {
+            this.whenReady(() => {
+              fireAndForget(
+                this.queueOptions(async () => {
+                  if (!deepEqual(await getRawOptions(), this.options.raw)) {
+                    await this.updateOptions();
+                    this.updateTabsAfterOptionsChange();
+                  }
+                }),
+                "BackgroundProgram#onStorageChanged"
+              );
+            });
+          }
+        },
+        "BackgroundProgram#onStorageChanged"
       ),
       addListener(
         browser.runtime.onConnect,
@@ -2296,15 +2320,11 @@ export default class BackgroundProgram {
     const mac = info.os === "mac";
     const defaults = getDefaults({ mac });
     const rawOptions = await getRawOptions();
-    const defaulted = { ...flattenOptions(defaults), ...rawOptions };
-    const [unflattened, map] = unflattenOptions(defaulted);
-    const options = decode(Options, unflattened, map);
+    const options = decodeOptions(defaults, rawOptions);
 
     log("log", "BackgroundProgram#updateOptions", {
       defaults,
       rawOptions,
-      defaulted,
-      unflattened,
       options,
       decodeErrors: [],
     });
@@ -2321,27 +2341,28 @@ export default class BackgroundProgram {
   }
 
   async queueOptions(operation: () => Promise<void>): Promise<void> {
-    this.optionsQueue = this.optionsQueue.then(async () => {
-      try {
-        try {
-          await operation();
-        } finally {
-          await this.updateOptions();
-        }
-      } catch (errorAny) {
-        const error = errorAny as Error;
+    this.optionsQueue = this.optionsQueue
+      .then(operation)
+      .catch((error: Error) => {
         this.options.errors = [error.message];
-      }
-    });
+      });
     return this.optionsQueue;
   }
 
+  async writeOptions(operation: () => Promise<void>): Promise<void> {
+    return this.queueOptions(() =>
+      operation().finally(() => this.updateOptions())
+    );
+  }
+
   async saveOptions(partialOptions: PartialOptions): Promise<void> {
-    return this.queueOptions(async () => {
+    return this.writeOptions(async () => {
       const rawOptions = await getRawOptions();
       const { keysToRemove, optionsToSet } = diffOptions(
         flattenOptions(this.options.defaults),
-        flattenOptions({ ...this.options.values, ...partialOptions }),
+        flattenOptions(
+          decodeOptions(this.options.defaults, rawOptions, partialOptions)
+        ),
         rawOptions
       );
       log("log", "BackgroundProgram#saveOptions", {
@@ -2355,7 +2376,7 @@ export default class BackgroundProgram {
   }
 
   async resetOptions(): Promise<void> {
-    return this.queueOptions(() => browser.storage.sync.clear());
+    return this.writeOptions(() => browser.storage.sync.clear());
   }
 
   updateTabsAfterOptionsChange(): void {
@@ -2384,16 +2405,17 @@ export default class BackgroundProgram {
   ): ToWorker {
     const { hintsState } = tabState;
 
-    if (refreshToken) {
-      this.oneTimeWindowMessageToken = makeRandomToken();
-    }
+    const token =
+      (refreshToken ? undefined : this.frameTokens.get(tabState)) ??
+      makeRandomToken();
+    this.frameTokens.set(tabState, token);
 
     const common = {
       logLevel: log.level,
       keyTranslations: this.options.values.useKeyTranslations
         ? this.options.values.keyTranslations
         : {},
-      oneTimeWindowMessageToken: this.oneTimeWindowMessageToken,
+      oneTimeWindowMessageToken: token,
       mac: this.options.mac,
       isPinned: tabState.isPinned,
     };
@@ -2545,6 +2567,18 @@ export default class BackgroundProgram {
       }
     }
   }
+}
+
+function decodeOptions(
+  defaults: Options,
+  raw: OptionsData["raw"],
+  partial: PartialOptions = {}
+): Options {
+  const [unflattened, map] = unflattenOptions({
+    ...flattenOptions(defaults),
+    ...raw,
+  });
+  return decode(Options, { ...unflattened, ...partial }, map);
 }
 
 function isSavedTabState(value: unknown): value is TabState {

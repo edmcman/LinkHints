@@ -73,6 +73,7 @@ export const injected = (): (() => void) => {
   // Remember that this runs _before_ any page scripts.
   const CustomEvent2 = CustomEvent;
   const HTMLElement2 = HTMLElement;
+  const Element2 = Element;
   const ShadowRoot2 = ShadowRoot;
   // Don't use the usual `log` function here, too keep this file small.
   const { error: consoleLogError, log: consoleLog } = console;
@@ -80,7 +81,8 @@ export const injected = (): (() => void) => {
   /* eslint-disable @typescript-eslint/unbound-method */
   const { appendChild, removeChild, getRootNode } = Node.prototype;
   const { replaceWith } = Element.prototype;
-  const { addEventListener, dispatchEvent } = EventTarget.prototype;
+  const { addEventListener, removeEventListener, dispatchEvent } =
+    EventTarget.prototype;
   const { apply } = Reflect;
   const { get: mapGet } = Map.prototype;
   /* eslint-enable @typescript-eslint/unbound-method */
@@ -268,23 +270,22 @@ export const injected = (): (() => void) => {
     logError(`Failed to run hook for ${name} on`, obj, error);
   }
 
-  type OptionsByListener = Map<unknown, OptionsSet>;
-  type OptionsSet = Set<string>;
+  type ListenerRegistration = {
+    element: HTMLElement;
+    eventName: string;
+    listener: unknown;
+    options: boolean;
+    remove: () => void;
+    reset: () => void;
+  };
+  type OptionsByListener = Map<unknown, Map<string, ListenerRegistration>>;
 
-  // Changes to event listeners.
-  type QueueItem = QueueItemMethod | QueueItemProp;
-
-  // `.onclick` and similar.
-  type QueueItemProp = {
-    type: "prop";
+  type QueueItem = {
     hadListener: boolean;
     element: HTMLElement;
   };
 
-  // `.addEventListener` and `.removeEventListener`.
-  type QueueItemMethod = {
-    type: "method";
-    added: boolean;
+  type ListenerChange = {
     element: HTMLElement;
     eventName: string;
     listener: unknown;
@@ -298,7 +299,7 @@ export const injected = (): (() => void) => {
   };
 
   class ClickListenerTracker {
-    clickListenersByElement = new Map<HTMLElement, OptionsByListener>();
+    clickListenersByElement = new WeakMap<HTMLElement, OptionsByListener>();
 
     queue: Queue<QueueItem> = makeEmptyQueue();
 
@@ -311,7 +312,10 @@ export const injected = (): (() => void) => {
         cancelIdleCallback(this.idleCallbackId);
       }
 
-      this.clickListenersByElement = new Map<HTMLElement, OptionsByListener>();
+      this.clickListenersByElement = new WeakMap<
+        HTMLElement,
+        OptionsByListener
+      >();
       this.queue = makeEmptyQueue();
       this.sendQueue = makeEmptyQueue();
       this.idleCallbackId = undefined;
@@ -371,34 +375,11 @@ export const injected = (): (() => void) => {
 
         const item = this.queue.items[this.queue.index];
 
-        // `.onclick` or similar changed.
-        if (item.type === "prop") {
-          const { hadListener, element } = item;
-          // If the element has click listeners added via `.addEventListener`
-          // changing `.onclick` can't affect whether the element has at least
-          // one click listener.
-          if (!this.clickListenersByElement.has(element)) {
-            const hasListener = hasClickListenerProp(element);
-            if (!hadListener && hasListener) {
-              addedRemoved.add(element);
-            } else if (hadListener && !hasListener) {
-              addedRemoved.remove(element);
-            }
-          }
-        }
-        // `.addEventListener`
-        else if (item.added) {
-          const gotFirst = this.add(item);
-          if (gotFirst) {
-            addedRemoved.add(item.element);
-          }
-        }
-        // `.removeEventListener`
-        else {
-          const lostLast = this.remove(item);
-          if (lostLast) {
-            addedRemoved.remove(item.element);
-          }
+        const hasListener = this.has(item.element);
+        if (!item.hadListener && hasListener) {
+          addedRemoved.add(item.element);
+        } else if (item.hadListener && !hasListener) {
+          addedRemoved.remove(item.element);
         }
       }
 
@@ -447,94 +428,88 @@ export const injected = (): (() => void) => {
       return true;
     }
 
-    add({ element, eventName, listener, options }: QueueItemMethod): boolean {
-      const optionsString = stringifyOptions(eventName, options);
-      const optionsByListener = this.clickListenersByElement.get(element);
-
-      // No previous click listeners.
-      if (optionsByListener === undefined) {
-        this.clickListenersByElement.set(
-          element,
-          new Map([[listener, new Set([optionsString])]])
-        );
-
-        if (!hasClickListenerProp(element)) {
-          // The element went from no click listeners to one.
-          return true;
-        }
-
-        return false;
-      }
-
-      const optionsSet = optionsByListener.get(listener);
-
-      // New listener function.
-      if (optionsSet === undefined) {
-        optionsByListener.set(listener, new Set([optionsString]));
-        return false;
-      }
-
-      // Already seen listener function, but new options and/or event type.
-      if (!optionsSet.has(optionsString)) {
-        optionsSet.add(optionsString);
-        return false;
-      }
-
-      // Duplicate listener. Nothing to do.
-      return false;
+    has(element: HTMLElement): boolean {
+      return (
+        this.clickListenersByElement.has(element) ||
+        hasClickListenerProp(element)
+      );
     }
 
-    remove({
-      element,
-      eventName,
-      listener,
-      options,
-    }: QueueItemMethod): boolean {
-      const optionsString = stringifyOptions(eventName, options);
-      const optionsByListener = this.clickListenersByElement.get(element);
-
-      // The element has no click listeners.
-      if (optionsByListener === undefined) {
-        // If the element was created and given a listener in another frame and
-        // then was inserted in another frame, the element might actually have
-        // had a listener after all that was now removed. In Chrome this is
-        // tracked correctly, but in Firefox we need to "lie" here and say that
-        // the last listener was removed in case it was.
-        return false;
+    add({ element, eventName, listener, options }: ListenerChange): void {
+      const normalized =
+        typeof options === "object" && options !== null
+          ? (options as AddEventListenerOptions)
+          : { capture: Boolean(options) };
+      const { signal } = normalized;
+      if (signal?.aborted === true) {
+        return;
       }
-
-      const optionsSet = optionsByListener.get(listener);
-
-      // The element has click listeners, but not with `listener` as a callback.
-      if (optionsSet === undefined) {
-        return false;
+      const capture = Boolean(normalized.capture);
+      const key = stringifyOptions(eventName, capture);
+      const byListener =
+        this.clickListenersByElement.get(element) ??
+        new Map<unknown, Map<string, ListenerRegistration>>();
+      const registrations =
+        byListener.get(listener) ?? new Map<string, ListenerRegistration>();
+      if (registrations.has(key)) {
+        return;
       }
-
-      // The element has `listener` as a click callback, but with different
-      // options and/or event type.
-      if (!optionsSet.has(optionsString)) {
-        return false;
-      }
-
-      // Match! Remove the current options.
-      optionsSet.delete(optionsString);
-
-      // If that was the last options for `listener`, remove `listener`.
-      if (optionsSet.size === 0) {
-        optionsByListener.delete(listener);
-
-        // If that was the last `listener` for `element`, remove `element`.
-        if (optionsByListener.size === 0) {
-          this.clickListenersByElement.delete(element);
-
-          if (!hasClickListenerProp(element)) {
-            // The element went from one click listener to none.
-            return true;
+      const hadListener = this.has(element);
+      const registration: ListenerRegistration = {
+        element,
+        eventName,
+        listener,
+        options: capture,
+        remove: () => {
+          this.remove(registration);
+        },
+        reset: () => {
+          apply(removeEventListener, element, [eventName, removed, capture]);
+          if (signal !== undefined && signal !== null) {
+            apply(removeEventListener, signal, ["abort", aborted]);
           }
-        }
+        },
+      };
+      // A long-lived signal must not keep its target or listener alive.
+      const removed = weakCallback(registration.remove);
+      const aborted =
+        signal === undefined || signal === null
+          ? undefined
+          : weakCallback(registration.remove, signal);
+      if (Boolean(normalized.once)) {
+        apply(addEventListener, element, [
+          eventName,
+          removed,
+          { capture, once: true },
+        ]);
       }
+      if (signal !== undefined && signal !== null) {
+        apply(addEventListener, signal, ["abort", aborted]);
+      }
+      registrations.set(key, registration);
+      byListener.set(listener, registrations);
+      this.clickListenersByElement.set(element, byListener);
+      this.queueItem({ element, hadListener });
+    }
 
-      return false;
+    remove({ element, eventName, listener, options }: ListenerChange): void {
+      const key = stringifyOptions(eventName, options);
+      const byListener = this.clickListenersByElement.get(element);
+      const registrations = byListener?.get(listener);
+      const registration = registrations?.get(key);
+      if (registration === undefined) {
+        return;
+      }
+      const hadListener = this.has(element);
+      registration.reset();
+      registrations?.delete(key);
+      if (registrations?.size === 0) {
+        byListener?.delete(listener);
+      }
+      if (byListener?.size === 0) {
+        this.clickListenersByElement.delete(element);
+      }
+      this.queueItem({ element, hadListener });
     }
   }
 
@@ -696,7 +671,9 @@ export const injected = (): (() => void) => {
       // before we can dispatch events. Replace `element` with a dummy element,
       // move it into the secret element, and then replace the dummy back with
       // `element` again.
-      case "Closed": {
+      case "Closed":
+      // A fragment cannot be moved intact: appending it transfers its children.
+      case "Fragment": {
         const tempElement = createElement("div");
         apply(replaceWith, element, [tempElement]);
         apply(appendChild, secretElement, [element]);
@@ -710,17 +687,20 @@ export const injected = (): (() => void) => {
   type OpenComposedRootNode =
     | { type: "Closed" }
     | { type: "Document" }
-    | { type: "Element"; element: Element };
+    | { type: "Element"; element: Element }
+    | { type: "Fragment" };
 
   function getOpenComposedRootNode(element: Element): OpenComposedRootNode {
     const root = apply(getRootNode, element, []);
-    return root === element
-      ? { type: "Element", element }
+    return root instanceof Element2
+      ? { type: "Element", element: root }
       : root instanceof ShadowRoot2
       ? root.mode === "open"
         ? getOpenComposedRootNode(root.host)
         : { type: "Closed" }
-      : { type: "Document" };
+      : root.nodeType === 9
+      ? { type: "Document" }
+      : { type: "Fragment" };
   }
 
   const clickListenerTracker = new ClickListenerTracker();
@@ -747,30 +727,7 @@ export const injected = (): (() => void) => {
       return;
     }
 
-    // If `{ once: true }` is used, listen once ourselves so we can track the
-    // removal of the listener when it has triggered.
-    if (
-      typeof options === "object" &&
-      options !== null &&
-      Boolean((options as AddEventListenerOptions).once)
-    ) {
-      apply(addEventListener, element, [
-        eventName,
-        () => {
-          onRemoveEventListener(element, eventName, listener, options);
-        },
-        options,
-      ]);
-    }
-
-    clickListenerTracker.queueItem({
-      type: "method",
-      added: true,
-      element,
-      eventName,
-      listener,
-      options,
-    });
+    clickListenerTracker.add({ element, eventName, listener, options });
   }
 
   function onRemoveEventListener(
@@ -794,14 +751,7 @@ export const injected = (): (() => void) => {
       return;
     }
 
-    clickListenerTracker.queueItem({
-      type: "method",
-      added: false,
-      element,
-      eventName,
-      listener,
-      options,
-    });
+    clickListenerTracker.remove({ element, eventName, listener, options });
   }
 
   function onPropChangePreHook(element: unknown): QueueItem | undefined {
@@ -810,8 +760,7 @@ export const injected = (): (() => void) => {
     }
 
     return {
-      type: "prop",
-      hadListener: hasClickListenerProp(element),
+      hadListener: clickListenerTracker.has(element),
       element,
     };
   }
@@ -948,3 +897,12 @@ export const injected = (): (() => void) => {
   hookManager.conceal();
   return onReset;
 };
+
+function weakCallback(callback: () => void, signal?: AbortSignal): () => void {
+  const reference = new WeakRef(callback);
+  return () => {
+    if (signal === undefined || signal.aborted) {
+      reference.deref()?.();
+    }
+  };
+}

@@ -233,7 +233,6 @@ type MutationType = "added" | "changed" | "removed";
 type ShadowRootData = {
   shadowRoot: ShadowRoot;
   mutationObserver: MutationObserver;
-  resets: Resets;
   active: boolean;
   reference: WeakRef<ShadowRootData>;
 };
@@ -716,14 +715,12 @@ export default class ElementManager {
     // has its own MutationObserver, which can be `.disconnect()`:ed when hosts
     // are removed.
     const mutationObserver = new MutationObserver(this.onMutation.bind(this));
-    const resets = new Resets();
 
     mutationObserve(mutationObserver, shadowRoot);
 
     const root: ShadowRootData = {
       shadowRoot,
       mutationObserver,
-      resets,
       active: true,
       get reference() {
         return reference;
@@ -739,17 +736,22 @@ export default class ElementManager {
     // time to add any nodes to it yet. But if a shadow dom host element is
     // removed from the page and then re-inserted again then there _are_
     // elements in there that need to be queued.
-    const { childNodes } = shadowRoot;
-    if (childNodes.length > 0) {
-      const records: Array<Record> = [
+    this.queueShadowRoot(shadowRoot, "added");
+  }
+
+  queueShadowRoot(
+    shadowRoot: ShadowRoot,
+    mutationType: "added" | "removed"
+  ): void {
+    if (shadowRoot.childNodes.length > 0) {
+      this.queueRecords([
         {
-          addedNodes: childNodes,
-          removedNodes: [],
+          addedNodes: mutationType === "added" ? shadowRoot.childNodes : [],
+          removedNodes: mutationType === "removed" ? shadowRoot.childNodes : [],
           attributeName: null,
           target: shadowRoot,
         },
-      ];
-      this.queueRecords(records);
+      ]);
     }
   }
 
@@ -762,21 +764,9 @@ export default class ElementManager {
     this.activeShadowRoots.delete(root.reference);
     this.shadowRootFinalizer.unregister(root.reference);
     root.mutationObserver.disconnect();
-    root.resets.reset();
     root.active = false;
 
-    const { childNodes } = root.shadowRoot;
-    if (childNodes.length > 0) {
-      const records: Array<Record> = [
-        {
-          addedNodes: [],
-          removedNodes: childNodes,
-          attributeName: null,
-          target: root.shadowRoot,
-        },
-      ];
-      this.queueRecords(records);
-    }
+    this.queueShadowRoot(root.shadowRoot, "removed");
   }
 
   addOrRemoveElement(mutationType: MutationType, element: HTMLElement): void {
@@ -786,7 +776,9 @@ export default class ElementManager {
     ) {
       switch (mutationType) {
         case "added":
-          this.frameIntersectionObserver.observe(element);
+          if (element.isConnected) {
+            this.frameIntersectionObserver.observe(element);
+          }
           break;
         case "removed":
           this.frameIntersectionObserver.unobserve(element);
@@ -800,7 +792,9 @@ export default class ElementManager {
     }
 
     const type =
-      mutationType === "removed" ? undefined : this.getElementType(element);
+      mutationType === "removed" || !element.isConnected
+        ? undefined
+        : this.getElementType(element);
     if (type === undefined) {
       if (mutationType !== "added") {
         this.elements.delete(element);
@@ -823,12 +817,10 @@ export default class ElementManager {
       const root = this.shadowRoots.get(element);
       if (root !== undefined) {
         if (!root.active) {
-          // If an element has been removed and then re-inserted again, set up
-          // tracking of its shadow root again (if any). However, when
-          // `someElement.attachShadow()` is called, `someElement` might
-          // already have been in the queue. So if the tracking of the shadow
-          // root is already active, there’s no need to do it again.
           this.setShadowRoot(root.shadowRoot);
+        } else {
+          // Children created while disconnected weren't candidates yet.
+          this.queueShadowRoot(root.shadowRoot, "added");
         }
       } else if (element.shadowRoot !== null) {
         // Just after the extension is installed or updated, we might have
@@ -935,7 +927,9 @@ export default class ElementManager {
                   item.children = children;
 
                   this.addOrRemoveElement("added", element);
-                  this.queue.addedElements.add(element);
+                  if (element.isConnected) {
+                    this.queue.addedElements.add(element);
+                  }
 
                   if (deadline.timeRemaining() <= 0) {
                     this.requestIdleCallback();
@@ -956,7 +950,9 @@ export default class ElementManager {
                     const child = children[item.childIndex];
                     if (!this.queue.addedElements.has(child)) {
                       this.addOrRemoveElement("added", child);
-                      this.queue.addedElements.add(child);
+                      if (child.isConnected) {
+                        this.queue.addedElements.add(child);
+                      }
                     }
                   }
                 }

@@ -86,3 +86,43 @@ test("stop cancels startup observation and deferred document-write listeners", a
     false
   );
 });
+
+test("a disconnected addition can be revisited after connecting in the same idle queue", () => {
+  class Element {
+    isConnected = false;
+
+    querySelectorAll(): Array<never> {
+      return [];
+    }
+  }
+  const previous = globalThis.HTMLElement;
+  Object.assign(globalThis, { HTMLElement: Element });
+  try {
+    const manager = new ElementManager({
+      onMutation: () => undefined,
+      onDocumentWrite: () => undefined,
+    });
+    manager.requestIdleCallback = () => undefined;
+    const visits: Array<boolean> = [];
+    manager.addOrRemoveElement = (_type, element) => {
+      visits.push(element.isConnected);
+    };
+    const element = new Element();
+    const records = [
+      {
+        addedNodes: [element as unknown as Node],
+        removedNodes: [],
+        attributeName: null,
+        target: element as unknown as Node,
+      },
+    ];
+    manager.queueRecords(records);
+    manager.flushQueue({ timeRemaining: () => 0 });
+    element.isConnected = true;
+    manager.queueRecords(records);
+    manager.flushQueue({ timeRemaining: () => Infinity });
+    expect(visits).toEqual([false, true]);
+  } finally {
+    globalThis.HTMLElement = previous;
+  }
+});
