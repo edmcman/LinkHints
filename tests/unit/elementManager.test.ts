@@ -36,6 +36,20 @@ const { default: ElementManager } =
   require("../../src/worker/ElementManager") as typeof import("../../src/worker/ElementManager");
 /* eslint-enable @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports */
 
+test("the renderer shadow root is excluded from discovery observers", () => {
+  const manager = new ElementManager({
+    onMutation: () => undefined,
+    onDocumentWrite: () => undefined,
+  });
+  const shadowRoot = {
+    host: { id: "__link_hintsWebExt" },
+    childNodes: [],
+  } as unknown as ShadowRoot;
+  manager.setShadowRoot(shadowRoot);
+  expect(manager.shadowRoots.has(shadowRoot.host)).toBe(false);
+  expect(manager.activeShadowRoots.size).toBe(0);
+});
+
 test("stop disconnects shadow root observers, including reactivated roots", () => {
   const manager = new ElementManager({
     onMutation: () => undefined,

@@ -1,4 +1,13 @@
-import { array, multi, stringUnion } from "tiny-decoders";
+import {
+  array,
+  boolean,
+  fieldsAuto,
+  multi,
+  number,
+  optional,
+  string,
+  stringUnion,
+} from "tiny-decoders";
 
 export type ElementType = ReturnType<typeof ElementType>;
 export const ElementType = stringUnion({
@@ -18,17 +27,21 @@ export const ElementTypes = multi({
   }),
 });
 
-export type Point = {
-  x: number;
-  y: number;
-  align: "left" | "right";
-  debug: string;
+const pointFields = {
+  x: number,
+  y: number,
+  align: stringUnion({ left: null, right: null }),
+  debug: string,
 };
 
-export type HintMeasurements = Point & {
-  maxX: number;
-  weight: number;
-};
+export type Point = Pick<HintMeasurements, keyof typeof pointFields>;
+
+export type HintMeasurements = ReturnType<typeof HintMeasurements>;
+export const HintMeasurements = fieldsAuto({
+  ...pointFields,
+  maxX: number,
+  weight: number,
+});
 
 export type VisibleElement = {
   element: HTMLElement;
@@ -37,31 +50,37 @@ export type VisibleElement = {
   hasClickListener: boolean;
 };
 
-export type ElementReport = {
-  type: ElementType;
-  index: number;
-  hintMeasurements: HintMeasurements;
-  url: string | undefined;
-  urlWithTarget: string | undefined;
-  text: string;
-  textContent: boolean;
-  textWeight: number;
-  isTextInput: boolean;
-  hasClickListener: boolean;
+const elementReportFields = {
+  type: ElementType,
+  index: number,
+  hintMeasurements: HintMeasurements,
+  url: optional(string),
+  urlWithTarget: optional(string),
+  text: string,
+  textContent: boolean,
+  textWeight: number,
+  isTextInput: boolean,
+  hasClickListener: boolean,
 };
 
-export type ExtendedElementReport = ElementReport & {
-  frame: {
-    id: number;
-    index: number;
-  };
-  hidden: boolean;
+export type ElementReport = ReturnType<typeof ElementReport>;
+export const ElementReport = fieldsAuto(elementReportFields);
+
+const extendedElementReportFields = {
+  ...elementReportFields,
+  frame: fieldsAuto({ id: number, index: number }),
+  hidden: boolean,
 };
 
-export type ElementWithHint = ExtendedElementReport & {
-  weight: number;
-  hint: string;
-};
+export type ExtendedElementReport = ReturnType<typeof ExtendedElementReport>;
+export const ExtendedElementReport = fieldsAuto(extendedElementReportFields);
+
+export type ElementWithHint = ReturnType<typeof ElementWithHint>;
+export const ElementWithHint = fieldsAuto({
+  ...extendedElementReportFields,
+  weight: number,
+  hint: string,
+});
 
 export function elementKey(element: ElementWithHint): string {
   const { x, y, align } = element.hintMeasurements;

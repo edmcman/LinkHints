@@ -46,6 +46,75 @@ const { onInvalidated, Resets } =
 /* eslint-enable @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports */
 
 [WorkerProgram, RendererProgram].forEach((Program) => {
+  test(`${Program.name} replaces reconnect checks and cancels them on stop`, () => {
+    const originalConnect = browser.runtime.connect;
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    const timers = new Map<number, () => void>();
+    let nextTimer = 0;
+    let disconnect = (): void => undefined;
+    let reconnects = 0;
+    Object.assign(browser.runtime, {
+      connect: () => {
+        reconnects += 1;
+        const port = {
+          onDisconnect: {
+            addListener: (callback: () => void) => {
+              disconnect = callback;
+            },
+          },
+          disconnect: () => {
+            disconnect();
+          },
+        };
+        return port;
+      },
+    });
+    Object.assign(globalThis, {
+      setTimeout: (callback: () => void) => {
+        timers.set(++nextTimer, callback);
+        return nextTimer;
+      },
+      clearTimeout: (id: number) => timers.delete(id),
+    });
+    try {
+      const program = Object.assign(
+        Object.create(Program.prototype) as Renderer & Worker,
+        {
+          running: true,
+          lifecycleGeneration: 0,
+          resets: new Resets(),
+          elementManager: { stop: () => undefined },
+          unrender: () => undefined,
+          clearCurrent: () => undefined,
+        }
+      );
+      program.connect();
+      for (let cycle = 0; cycle < 20; cycle += 1) {
+        disconnect();
+        expect(timers.size).toBe(1);
+        const [id, callback] = Array.from(timers)[0];
+        timers.delete(id);
+        callback();
+        expect(program.resets._callbacks.length).toBeLessThanOrEqual(1);
+      }
+      expect(reconnects).toBe(21);
+      const staleCallbacks = Array.from(timers.values());
+      program.stop();
+      expect(timers.size).toBe(0);
+      staleCallbacks.forEach((callback) => {
+        callback();
+      });
+      disconnect();
+      expect(reconnects).toBe(21);
+      expect(timers.size).toBe(0);
+    } finally {
+      browser.runtime.connect = originalConnect;
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+    }
+  });
+
   test(`${Program.name} does not connect after stopping during startup`, async () => {
     const program = Object.assign(
       Object.create(Program.prototype) as Renderer & Worker,

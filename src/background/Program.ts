@@ -15,7 +15,6 @@ import {
   HintsMode,
   KeyboardAction,
   KeyboardMapping,
-  KeyboardModeBackground,
   KeyboardModeWorker,
   NormalizedKeypress,
   PREVENT_OVERTYPING_ALLOWED_KEYBOARD_ACTIONS,
@@ -57,14 +56,15 @@ import {
   PartialOptions,
   unflattenOptions,
 } from "../shared/options";
-import {
-  MAX_PERF_ENTRIES,
-  Perf,
-  Stats,
-  TabsPerf,
-  TimeTracker,
-} from "../shared/perf";
+import { MAX_PERF_ENTRIES, TabsPerf, TimeTracker } from "../shared/perf";
 import { bool, tweakable, unsignedInt } from "../shared/tweakable";
+import {
+  Highlighted,
+  HighlightedItem,
+  HintsState,
+  PendingElements,
+  TabState,
+} from "./tabState";
 import {
   removeTabState,
   restoreAllTabStates,
@@ -76,73 +76,6 @@ type MessageInfo = {
   frameId: number;
   url: string | undefined;
 };
-
-type TabState = {
-  hintsState: HintsState;
-  keyboardMode: KeyboardModeBackground;
-  perf: Perf;
-  isOptionsPage: boolean;
-  isPinned: boolean;
-  rendererFrameId?: number;
-};
-
-type HintsState =
-  | {
-      type: "Collecting";
-      mode: HintsMode;
-      pendingElements: PendingElements;
-      startTime: number;
-      time: TimeTracker;
-      stats: Array<Stats>;
-      refreshing: boolean;
-      highlighted: Highlighted;
-    }
-  | {
-      type: "Hinting";
-      mode: HintsMode;
-      startTime: number;
-      time: TimeTracker;
-      stats: Array<Stats>;
-      enteredChars: string;
-      enteredText: string;
-      elementsWithHints: Array<ElementWithHint>;
-      highlighted: Highlighted;
-      updateState: UpdateState;
-      peeking: boolean;
-    }
-  | {
-      type: "Idle";
-      highlighted: Highlighted;
-    };
-
-// All HintsState types store the highlighted hints (highlighted due to being
-// matched, not due to filtering by text), so that they can stay highlighted for
-// `t.MATCH_HIGHLIGHT_DURATION` ms.
-type Highlighted = Array<HighlightedItem>;
-
-type HighlightedItem = {
-  sinceTimestamp: number;
-  element: ElementWithHint;
-};
-
-type PendingElements = {
-  pendingFrames: {
-    answering: number;
-    collecting: number;
-    lastStartWaitTimestamp: number;
-  };
-  elements: Array<ExtendedElementReport>;
-};
-
-type UpdateState =
-  | {
-      type: "WaitingForResponse";
-      lastUpdateStartTimestamp: number;
-    }
-  | {
-      type: "WaitingForTimeout";
-      lastUpdateStartTimestamp: number;
-    };
 
 type HintInput =
   | {
@@ -357,18 +290,14 @@ export default class BackgroundProgram {
       for (const [tabIdStr, serial] of Object.entries(saved)) {
         const tabIdNum = Number(tabIdStr);
         if (openTabIds.has(tabIdNum)) {
-          if (!isSavedTabState(serial)) {
+          let tabState: TabState;
+          try {
+            tabState = decode(TabState, serial);
+          } catch {
             removeTabState(tabIdNum);
             this.tabState.set(tabIdNum, makeEmptyTabState(tabIdNum));
             this.sendRendererMessage({ type: "Unrender" }, { tabId: tabIdNum });
             continue;
-          }
-          const tabState = serial;
-          if (tabState.hintsState.type !== "Idle") {
-            tabState.hintsState.time = Object.assign(
-              new TimeTracker(),
-              tabState.hintsState.time
-            );
           }
           tabState.isPinned =
             tabs.find((tab) => tab.id === tabIdNum)?.pinned ?? false;
@@ -398,7 +327,6 @@ export default class BackgroundProgram {
           type: "WaitingForTimeout",
           lastUpdateStartTimestamp: 0,
         };
-        this.setTimeout(tabId, 0);
       }
       this.setTimeout(tabId, 0);
       if (state.keyboardMode.type === "PreventOverTyping") {
@@ -2579,31 +2507,6 @@ function decodeOptions(
     ...raw,
   });
   return decode(Options, { ...unflattened, ...partial }, map);
-}
-
-function isSavedTabState(value: unknown): value is TabState {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const state = value as Partial<TabState>;
-  const hints = state.hintsState;
-  return (
-    typeof state.isPinned === "boolean" &&
-    typeof state.isOptionsPage === "boolean" &&
-    Array.isArray(state.perf) &&
-    typeof state.keyboardMode === "object" &&
-    state.keyboardMode !== null &&
-    typeof state.keyboardMode.type === "string" &&
-    typeof hints === "object" &&
-    hints !== null &&
-    Array.isArray(hints.highlighted) &&
-    (hints.type === "Idle" ||
-      ((hints.type === "Collecting" || hints.type === "Hinting") &&
-        typeof hints.time === "object" &&
-        hints.time !== null &&
-        Array.isArray(hints.time._durations) &&
-        (hints.type !== "Hinting" || Array.isArray(hints.elementsWithHints))))
-  );
 }
 
 // Per-tab calls are asynchronous, so the tab can be gone by the time they run:

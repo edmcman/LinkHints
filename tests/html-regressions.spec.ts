@@ -129,6 +129,38 @@ test.describe("stable html regressions", () => {
     expect((await hints(page)).length).toBeGreaterThan(before);
   });
 
+  test("text filtering updates highlights when targets are removed", async ({
+    context,
+    html,
+  }) => {
+    const page = await context.newPage();
+    const url = html.url("__regression_select.html");
+    await page.route(url, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: '<p><a href="#one">123 One</a></p><p><a href="#two">123 Two</a></p><p><a href="#other">Other</a></p>',
+      })
+    );
+    await openAndHint(page, url);
+    await page.keyboard.type("123");
+    const visible = page.locator(
+      "#__LinkHintsWebExt .hint:not(.shruggie):not(.hidden)"
+    );
+    const highlights = page.locator("#__LinkHintsWebExt .matchedText");
+    await expect(visible).toHaveCount(2);
+    await expect(highlights).toHaveCount(2);
+    await page.evaluate(() => {
+      document.querySelector("a")?.remove();
+    });
+    await expect(visible).toHaveCount(1);
+    await expect(highlights).toHaveCount(1);
+    for (let index = 0; index < 3; index += 1) {
+      await page.keyboard.press("Backspace");
+    }
+    await expect(visible).toHaveCount(2);
+    await expect(highlights).toHaveCount(0);
+  });
+
   test("inserted frames are discovered after their lifecycle update", async ({
     context,
     html,

@@ -8,6 +8,7 @@ import type {
 import {
   addEventListener,
   Box,
+  CONTAINER_ID,
   fireAndForget,
   getElementFromPoint,
   getElementsFromPoint,
@@ -711,6 +712,10 @@ export default class ElementManager {
   }
 
   setShadowRoot(shadowRoot: ShadowRoot): void {
+    // The renderer's open development root would feed its mutations back into rendering.
+    if (shadowRoot.host.id === CONTAINER_ID) {
+      return;
+    }
     // MutationObservers don’t have an `.unobserve` method, so each shadow root
     // has its own MutationObserver, which can be `.disconnect()`:ed when hosts
     // are removed.

@@ -11,6 +11,15 @@ const { removeTabState, restoreAllTabStates, saveTabState } =
   require("../../src/background/tabStateStorage") as typeof import("../../src/background/tabStateStorage");
 /* eslint-enable @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports */
 
+test("unavailable session storage does not serialize checkpoints", () => {
+  Object.assign(globalThis, { chrome: undefined });
+  saveTabState(1, {
+    toJSON() {
+      throw new Error("Unexpected serialization");
+    },
+  });
+});
+
 test("independent checkpoints preserve snapshots and ordered removal", async () => {
   const store: Record<string, unknown> = {};
   Object.assign(globalThis, {

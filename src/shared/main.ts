@@ -54,6 +54,39 @@ export function onInvalidated(
   };
 }
 
+export function portConnection(
+  name: string,
+  cleanup: () => void
+): { connect: () => void; disconnect: () => void } {
+  let port: browser.runtime.Port | undefined;
+  let cancelCheck: (() => void) | undefined;
+  let stopped = false;
+  function connect(): void {
+    if (stopped || port !== undefined) {
+      return;
+    }
+    const connected = browser.runtime.connect({ name });
+    port = connected;
+    connected.onDisconnect.addListener(() => {
+      if (stopped || port !== connected) {
+        return;
+      }
+      port = undefined;
+      cancelCheck?.();
+      cancelCheck = onInvalidated(cleanup, connect);
+    });
+  }
+  return {
+    connect,
+    disconnect: () => {
+      stopped = true;
+      cancelCheck?.();
+      port?.disconnect();
+      port = undefined;
+    },
+  };
+}
+
 export type LogLevel = ReturnType<typeof LogLevel>;
 export const LogLevel = stringUnion({
   error: null,

@@ -26,7 +26,7 @@ import {
   LAST_NON_WHITESPACE,
   log,
   NON_WHITESPACE,
-  onInvalidated,
+  portConnection,
   Resets,
   walkTextNodes,
 } from "../shared/main";
@@ -46,7 +46,7 @@ type CurrentElements = {
   frames: Array<HTMLFrameElement | HTMLIFrameElement>;
   viewports: Array<Box>;
   types: ElementTypes;
-  indexes: Array<number>;
+  indexes: Set<number>;
   words: Array<string>;
   waitId: WaitId;
 };
@@ -89,7 +89,7 @@ export default class WorkerProgram {
 
   oneTimeWindowMessageToken: string | undefined = undefined;
 
-  port: browser.runtime.Port | undefined = undefined;
+  connection: ReturnType<typeof portConnection> | undefined = undefined;
 
   mac = false;
 
@@ -139,26 +139,13 @@ export default class WorkerProgram {
   }
 
   connect(): void {
-    if (!this.running || this.port !== undefined) {
+    if (!this.running) {
       return;
     }
-    const port = browser.runtime.connect({ name: "worker" });
-    this.port = port;
-    port.onDisconnect.addListener(() => {
-      if (this.port === port) {
-        this.port = undefined;
-        this.resets.add(
-          onInvalidated(
-            () => {
-              this.stop();
-            },
-            () => {
-              this.connect();
-            }
-          )
-        );
-      }
+    this.connection ??= portConnection("worker", () => {
+      this.stop();
     });
+    this.connection.connect();
   }
 
   stop(): void {
@@ -166,9 +153,8 @@ export default class WorkerProgram {
     this.lifecycleGeneration += 1;
     log("log", "WorkerProgram#stop");
     this.resets.reset();
-    const { port } = this;
-    this.port = undefined;
-    port?.disconnect();
+    this.connection?.disconnect();
+    this.connection = undefined;
     this.elementManager.stop();
     this.oneTimeWindowMessageToken = undefined;
     this.suppressNextKeyup = undefined;
@@ -321,11 +307,11 @@ export default class WorkerProgram {
         }
 
         const { indexes, words } = message;
-        current.indexes = indexes;
+        current.indexes = new Set(indexes);
         current.words = words;
 
         const elements = current.elements.filter((_elementData, index) =>
-          indexes.includes(index)
+          current.indexes.has(index)
         );
         const wordsSet = new Set(words);
         const rects = elements.flatMap((elementData) =>
@@ -870,7 +856,7 @@ export default class WorkerProgram {
       frames,
       viewports,
       types,
-      indexes: [],
+      indexes: new Set(),
       words: [],
       waitId: { tag: "NotWaiting" },
     };
@@ -914,7 +900,7 @@ export default class WorkerProgram {
       words.length === 0
         ? []
         : elements.flatMap((maybeItem, index) => {
-            if (maybeItem === undefined || !current.indexes.includes(index)) {
+            if (maybeItem === undefined || !current.indexes.has(index)) {
               return [];
             }
             return getTextRectsHelper({

@@ -212,3 +212,82 @@ test("frame tokens belong to their tab and new frames reuse that tab's token", (
   );
   expect(program.makeWorkerState(state)).not.toEqual(first);
 });
+
+test("a malformed saved tab cannot prevent startup or other tab restoration", async () => {
+  const program = new BackgroundProgram();
+  const savedState = {
+    hintsState: { type: "Idle", highlighted: [] },
+    keyboardMode: { type: "Capture" },
+    perf: [],
+    isOptionsPage: false,
+    isPinned: false,
+  };
+  const browserBefore = { ...browser };
+  const chromeBefore = (globalThis as { chrome?: unknown }).chrome;
+  const removed: Array<string> = [];
+  Object.assign(globalThis, {
+    chrome: {
+      storage: {
+        session: {
+          get: () =>
+            Promise.resolve({
+              "tabState:1": {
+                ...savedState,
+                hintsState: { type: "Idle", highlighted: [null] },
+              },
+              "tabState:2": savedState,
+            }),
+          remove: (key: string) => {
+            removed.push(key);
+            return Promise.resolve();
+          },
+        },
+      },
+    },
+    COLOR_BADGE: "yellow",
+  });
+  Object.assign(browser, {
+    tabs: {
+      query: () =>
+        Promise.resolve([
+          { id: 1, pinned: false },
+          { id: 2, pinned: true },
+        ]),
+      get: () => Promise.resolve({ pinned: false }),
+    },
+    action: { setBadgeBackgroundColor: () => Promise.resolve() },
+  });
+  program.updateOptions = () => Promise.resolve();
+  program.updateIcon = () => Promise.resolve();
+  program.maybeOpenTutorial = () => Promise.resolve();
+  program.maybeReopenOptions = () => Promise.resolve();
+  program.sendWorkerMessage = () => undefined;
+  const unrendered: Array<number> = [];
+  program.sendRendererMessage = (message, { tabId }) => {
+    if (message.type === "Unrender") {
+      unrendered.push(tabId);
+    }
+  };
+  program.setTimeout = () => undefined;
+  program.checkpoint = () => undefined;
+  let handled = false;
+  program.whenReady(() => {
+    handled = true;
+  });
+  try {
+    await program.start();
+    expect(program.ready).toBe(true);
+    expect(handled).toBe(true);
+    expect(program.tabState.get(1)?.hintsState).toEqual({
+      type: "Idle",
+      highlighted: [],
+    });
+    expect(program.tabState.get(2)?.keyboardMode).toEqual({ type: "Capture" });
+    expect(program.tabState.get(2)?.isPinned).toBe(true);
+    expect(unrendered).toEqual([1]);
+    expect(removed).toEqual(["tabState:1"]);
+  } finally {
+    Object.assign(browser, browserBefore);
+    Object.assign(globalThis, { chrome: chromeBefore });
+  }
+});

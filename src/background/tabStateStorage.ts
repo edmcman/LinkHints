@@ -18,20 +18,11 @@ function storage(): Storage | undefined {
 
 const pending = new Map<number, Promise<void>>();
 
-function write(
-  tabId: number,
-  operation: (area: Storage) => Promise<void>
-): void {
-  const area = storage();
-  if (area === undefined) {
-    return;
-  }
+function write(tabId: number, operation: () => Promise<void>): void {
   const previous = pending.get(tabId) ?? Promise.resolve();
-  const next = previous
-    .then(() => operation(area))
-    .catch((error) => {
-      log("error", "tabStateStorage: write failed", error);
-    });
+  const next = previous.then(operation).catch((error) => {
+    log("error", "tabStateStorage: write failed", error);
+  });
   pending.set(tabId, next);
   void next.then(() => {
     if (pending.get(tabId) === next) {
@@ -59,10 +50,17 @@ export async function restoreAllTabStates(): Promise<Record<string, unknown>> {
 }
 
 export function saveTabState(tabId: number, state: unknown): void {
+  const area = storage();
+  if (area === undefined) {
+    return;
+  }
   const snapshot = JSON.parse(JSON.stringify(state)) as unknown;
-  write(tabId, (area) => area.set({ [`${PREFIX}${tabId}`]: snapshot }));
+  write(tabId, () => area.set({ [`${PREFIX}${tabId}`]: snapshot }));
 }
 
 export function removeTabState(tabId: number): void {
-  write(tabId, (area) => area.remove(`${PREFIX}${tabId}`));
+  const area = storage();
+  if (area !== undefined) {
+    write(tabId, () => area.remove(`${PREFIX}${tabId}`));
+  }
 }

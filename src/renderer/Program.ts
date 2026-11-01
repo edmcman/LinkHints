@@ -29,7 +29,7 @@ import {
   fireAndForget,
   getViewport,
   log,
-  onInvalidated,
+  portConnection,
   Resets,
   setStyles,
 } from "../shared/main";
@@ -65,7 +65,7 @@ export default class RendererProgram {
 
   resets = new Resets();
 
-  port: browser.runtime.Port | undefined = undefined;
+  connection: ReturnType<typeof portConnection> | undefined = undefined;
 
   shruggieElement: HTMLElement;
 
@@ -206,26 +206,13 @@ export default class RendererProgram {
   }
 
   connect(): void {
-    if (!this.running || this.port !== undefined) {
+    if (!this.running) {
       return;
     }
-    const port = browser.runtime.connect({ name: "renderer" });
-    this.port = port;
-    port.onDisconnect.addListener(() => {
-      if (this.port === port) {
-        this.port = undefined;
-        this.resets.add(
-          onInvalidated(
-            () => {
-              this.stop();
-            },
-            () => {
-              this.connect();
-            }
-          )
-        );
-      }
+    this.connection ??= portConnection("renderer", () => {
+      this.stop();
     });
+    this.connection.connect();
   }
 
   stop(): void {
@@ -233,9 +220,8 @@ export default class RendererProgram {
     this.lifecycleGeneration += 1;
     log("log", "RendererProgram#stop");
     this.resets.reset();
-    const { port } = this;
-    this.port = undefined;
-    port?.disconnect();
+    this.connection?.disconnect();
+    this.connection = undefined;
     this.unrender();
   }
 

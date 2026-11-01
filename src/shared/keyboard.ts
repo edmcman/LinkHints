@@ -3,6 +3,8 @@ import {
   chain,
   DecoderError,
   fieldsAuto,
+  fieldsUnion,
+  number,
   string,
   stringUnion,
   tuple,
@@ -129,10 +131,15 @@ export const KeyboardMappingWithModifiers = fieldsAuto<KeyboardMapping>({
   action: KeyboardAction,
 });
 
-export type KeyboardModeBackground =
-  | { type: "Capture" }
-  | { type: "FromHintsState" }
-  | { type: "PreventOverTyping"; sinceTimestamp: number };
+export type KeyboardModeBackground = ReturnType<typeof KeyboardModeBackground>;
+export const KeyboardModeBackground = fieldsUnion("type", {
+  Capture: fieldsAuto({ type: stringUnion({ Capture: null }) }),
+  FromHintsState: fieldsAuto({ type: stringUnion({ FromHintsState: null }) }),
+  PreventOverTyping: fieldsAuto({
+    type: stringUnion({ PreventOverTyping: null }),
+    sinceTimestamp: number,
+  }),
+});
 
 export type KeyboardModeWorker =
   | "Capture"
