@@ -1099,6 +1099,7 @@ export default class BackgroundProgram {
 
     switch (mode) {
       case "Click":
+      case "ManyClick": {
         this.sendWorkerMessage(
           {
             type: "ClickElement",
@@ -1109,33 +1110,10 @@ export default class BackgroundProgram {
             frameId: match.frame.id,
           }
         );
-        return true;
 
-      case "ManyClick": {
-        if (match.isTextInput) {
-          this.sendWorkerMessage(
-            {
-              type: "ClickElement",
-              index: match.frame.index,
-            },
-            {
-              tabId,
-              frameId: match.frame.id,
-            }
-          );
+        if (mode === "Click" || match.isTextInput) {
           return true;
         }
-
-        this.sendWorkerMessage(
-          {
-            type: "ClickElement",
-            index: match.frame.index,
-          },
-          {
-            tabId,
-            frameId: match.frame.id,
-          }
-        );
 
         // Highlight the matched hints immediately, but hide others when the
         // highlight duration is over. Likely, the same hints will appear again
@@ -1837,20 +1815,11 @@ export default class BackgroundProgram {
         break;
 
       case "RotateHintsForward":
-        this.sendRendererMessage(
-          {
-            type: "RotateHints",
-            forward: true,
-          },
-          { tabId: info.tabId }
-        );
-        break;
-
       case "RotateHintsBackward":
         this.sendRendererMessage(
           {
             type: "RotateHints",
-            forward: false,
+            forward: action === "RotateHintsForward",
           },
           { tabId: info.tabId }
         );
@@ -1906,16 +1875,10 @@ export default class BackgroundProgram {
         break;
 
       case "ActivateHint":
-        this.handleHintInput(info.tabId, timestamp, {
-          type: "ActivateHint",
-          alt: false,
-        });
-        break;
-
       case "ActivateHintAlt":
         this.handleHintInput(info.tabId, timestamp, {
           type: "ActivateHint",
-          alt: true,
+          alt: action === "ActivateHintAlt",
         });
         break;
 
@@ -2571,17 +2534,11 @@ const TAB_TYPES: ElementTypes = ["link"];
 function getElementTypes(mode: HintsMode): ElementTypes {
   switch (mode) {
     case "Click":
-      return CLICK_TYPES;
-
-    case "BackgroundTab":
-      return TAB_TYPES;
-
-    case "ForegroundTab":
-      return TAB_TYPES;
-
     case "ManyClick":
       return CLICK_TYPES;
 
+    case "BackgroundTab":
+    case "ForegroundTab":
     case "ManyTab":
       return TAB_TYPES;
 
@@ -2596,21 +2553,13 @@ function getCombiningUrl(
 ): string | undefined {
   switch (mode) {
     case "Click":
-      return shouldCombineHintsForClick(element)
-        ? element.urlWithTarget
-        : undefined;
-
-    case "BackgroundTab":
-      return element.url;
-
-    case "ForegroundTab":
-      return element.url;
-
     case "ManyClick":
       return shouldCombineHintsForClick(element)
         ? element.urlWithTarget
         : undefined;
 
+    case "BackgroundTab":
+    case "ForegroundTab":
     case "ManyTab":
       return element.url;
 
@@ -3085,25 +3034,17 @@ function mergeElements(
     }
 
     return {
-      type: update.type,
+      ...element,
+      ...update,
       index: element.index,
       hintMeasurements: {
         ...update.hintMeasurements,
         // Keep the original weight so that hints don't change.
         weight: element.hintMeasurements.weight,
       },
-      url: update.url,
-      urlWithTarget: update.urlWithTarget,
-      text: update.text,
-      textContent: update.textContent,
       // Keep the original text weight so that hints don't change.
       textWeight: element.textWeight,
-      isTextInput: update.isTextInput,
-      hasClickListener: update.hasClickListener,
-      frame: element.frame,
       hidden: false,
-      weight: element.weight,
-      hint: element.hint,
     };
   });
 }
