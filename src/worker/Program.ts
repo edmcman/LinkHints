@@ -102,7 +102,13 @@ export default class WorkerProgram {
     onDocumentWrite: this.addWindowListeners.bind(this),
   });
 
+  lifecycleGeneration = 0;
+
+  running = false;
+
   async start(): Promise<void> {
+    const generation = ++this.lifecycleGeneration;
+    this.running = true;
     log("log", "WorkerProgram#start");
     this.resets.add(
       addListener(
@@ -113,6 +119,9 @@ export default class WorkerProgram {
     );
     this.addWindowListeners();
     await this.elementManager.start();
+    if (generation !== this.lifecycleGeneration) {
+      return;
+    }
 
     this.markTutorial();
 
@@ -124,31 +133,37 @@ export default class WorkerProgram {
     } catch {
       return;
     }
-    this.connect();
+    if (generation === this.lifecycleGeneration) {
+      this.connect();
+    }
   }
 
   connect(): void {
-    if (this.port !== undefined) {
+    if (!this.running || this.port !== undefined) {
       return;
     }
-    const port = browser.runtime.connect();
+    const port = browser.runtime.connect({ name: "worker" });
     this.port = port;
     port.onDisconnect.addListener(() => {
       if (this.port === port) {
         this.port = undefined;
-        onInvalidated(
-          () => {
-            this.stop();
-          },
-          () => {
-            this.connect();
-          }
+        this.resets.add(
+          onInvalidated(
+            () => {
+              this.stop();
+            },
+            () => {
+              this.connect();
+            }
+          )
         );
       }
     });
   }
 
   stop(): void {
+    this.running = false;
+    this.lifecycleGeneration += 1;
     log("log", "WorkerProgram#stop");
     this.resets.reset();
     const { port } = this;

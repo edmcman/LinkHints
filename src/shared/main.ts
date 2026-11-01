@@ -24,9 +24,14 @@ export function isExtensionContextValid(): boolean {
 export function onInvalidated(
   cleanup: () => void,
   reconnect: () => void
-): void {
+): () => void {
   const delays = [100, 400, 1500];
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout>;
   function check(): void {
+    if (cancelled) {
+      return;
+    }
     if (!isExtensionContextValid()) {
       cleanup();
       return;
@@ -38,11 +43,15 @@ export function onInvalidated(
     }
     const delay = delays.shift();
     if (delay !== undefined) {
-      setTimeout(check, delay);
+      timer = setTimeout(check, delay);
     }
   }
   // Chrome can disconnect ports before it invalidates the extension context.
-  setTimeout(check, 100);
+  timer = setTimeout(check, 100);
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+  };
 }
 
 export type LogLevel = ReturnType<typeof LogLevel>;

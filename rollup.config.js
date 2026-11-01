@@ -29,6 +29,9 @@ const optionalRequire = optionalRequireImport(require);
 const customConfig = optionalRequire("./custom.config.cjs") || {};
 
 const PROD = config.prod;
+const BUILD_ID = PROD
+  ? config.meta.version.replace(/\W/g, "_")
+  : Date.now().toString();
 
 /** @type {{ DEFAULT_LOG_LEVEL: string, DEFAULT_STORAGE_SYNC: unknown }} */
 const { DEFAULT_LOG_LEVEL = "log", DEFAULT_STORAGE_SYNC = null } = PROD
@@ -299,10 +302,7 @@ function makeGlobals() {
       config.browser === undefined
         ? `(navigator.userAgent.includes("Firefox") ? "firefox" : "chrome")`
         : JSON.stringify(config.browser),
-    // Note: BUILD_ID might vary between different files.
-    BUILD_ID: JSON.stringify(
-      PROD ? config.meta.version.replace(/\W/g, "_") : Date.now().toString()
-    ),
+    BUILD_ID: JSON.stringify(BUILD_ID),
     COLOR_BADGE: JSON.stringify(config.colors.badge),
     COLOR_GREEN: JSON.stringify(config.colors.green),
     COLOR_PURPLE: JSON.stringify(config.colors.purple),

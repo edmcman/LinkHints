@@ -192,6 +192,12 @@ export default class BackgroundProgram {
 
   tabState = new Map<number, TabState>();
 
+  collectingFrames = new WeakMap<PendingElements, Map<number, boolean>>();
+
+  framePorts = new Map<string, browser.runtime.Port>();
+
+  optionsQueue: Promise<void> = Promise.resolve();
+
   restoredTabsPerf: TabsPerf = {};
 
   oneTimeWindowMessageToken: string = makeRandomToken();
@@ -613,16 +619,35 @@ export default class BackgroundProgram {
   }
 
   onConnect(port: browser.runtime.Port): void {
-    port.onDisconnect.addListener(({ sender }) => {
-      const info = sender === undefined ? undefined : makeMessageInfo(sender);
-      if (info !== undefined) {
-        // A frame was removed. If in hints mode, hide all hints for elements in
-        // that frame.
-        this.whenReady(() => {
-          this.hideElements(info);
-          this.checkpoint(info.tabId);
-        });
-      }
+    const info =
+      port.sender === undefined ? undefined : makeMessageInfo(port.sender);
+    if (info === undefined || port.name !== "worker") {
+      return;
+    }
+    const key = `${info.tabId}:${info.frameId}`;
+    this.framePorts.set(key, port);
+    port.onDisconnect.addListener(() => {
+      this.whenReady(() => {
+        if (this.framePorts.get(key) !== port) {
+          return;
+        }
+        this.framePorts.delete(key);
+        const hintsState = this.tabState.get(info.tabId)?.hintsState;
+        if (hintsState?.type === "Collecting") {
+          const pending = hintsState.pendingElements;
+          const frames = this.collectingFrames.get(pending);
+          if (frames?.get(info.frameId) === true) {
+            pending.pendingFrames.collecting -= 1;
+          }
+          frames?.set(info.frameId, false);
+          pending.elements = pending.elements.filter(
+            (element) => element.frame.id !== info.frameId
+          );
+          this.maybeStartHinting(info.tabId);
+        }
+        this.hideElements(info);
+        this.checkpoint(info.tabId);
+      });
     });
   }
 
@@ -677,6 +702,11 @@ export default class BackgroundProgram {
           return;
         }
 
+        const frames = this.collectingFrames.get(hintsState.pendingElements);
+        if (frames === undefined || frames.has(info.frameId)) {
+          return;
+        }
+        frames.set(info.frameId, true);
         const { pendingFrames } = hintsState.pendingElements;
         pendingFrames.answering = Math.max(0, pendingFrames.answering - 1);
         pendingFrames.collecting += 1;
@@ -688,6 +718,13 @@ export default class BackgroundProgram {
         if (hintsState.type !== "Collecting") {
           return;
         }
+
+        const frames = this.collectingFrames.get(hintsState.pendingElements);
+        if (frames?.get(info.frameId) !== true) {
+          return;
+        }
+
+        frames.set(info.frameId, false);
 
         const elements: Array<ExtendedElementReport> = message.elements.map(
           (element) => ({
@@ -1991,6 +2028,10 @@ export default class BackgroundProgram {
       highlighted: tabState.hintsState.highlighted,
     };
 
+    this.collectingFrames.set(
+      tabState.hintsState.pendingElements,
+      new Map([[TOP_FRAME_ID, true]])
+    );
     this.updateBadge(tabId);
     this.setTimeout(tabId, t.BADGE_COLLECTING_DELAY.value);
   }
@@ -2171,6 +2212,11 @@ export default class BackgroundProgram {
     }
 
     this.tabState.delete(tabId);
+    for (const [key, port] of this.framePorts) {
+      if (port.sender?.tab?.id === tabId) {
+        this.framePorts.delete(key);
+      }
+    }
 
     if (!tabState.isOptionsPage) {
       this.sendOptionsMessage({
@@ -2274,14 +2320,24 @@ export default class BackgroundProgram {
     log.level = options.logLevel;
   }
 
+  async queueOptions(operation: () => Promise<void>): Promise<void> {
+    this.optionsQueue = this.optionsQueue.then(async () => {
+      try {
+        try {
+          await operation();
+        } finally {
+          await this.updateOptions();
+        }
+      } catch (errorAny) {
+        const error = errorAny as Error;
+        this.options.errors = [error.message];
+      }
+    });
+    return this.optionsQueue;
+  }
+
   async saveOptions(partialOptions: PartialOptions): Promise<void> {
-    // The options are stored flattened to increase the chance of the browser
-    // sync not overwriting things when options has changed from multiple
-    // places. This means we have to retrieve the whole storage, unflatten it,
-    // merge in the `partialOptions`, flatten that and finally store it. Just
-    // flattening `partialOptions` and storing that would mean that you couldn't
-    // remove any `options.keys`, for example.
-    try {
+    return this.queueOptions(async () => {
       const rawOptions = await getRawOptions();
       const { keysToRemove, optionsToSet } = diffOptions(
         flattenOptions(this.options.defaults),
@@ -2295,21 +2351,11 @@ export default class BackgroundProgram {
       });
       await browser.storage.sync.remove(keysToRemove);
       await browser.storage.sync.set(optionsToSet);
-      await this.updateOptions();
-    } catch (errorAny) {
-      const error = errorAny as Error;
-      this.options.errors = [error.message];
-    }
+    });
   }
 
   async resetOptions(): Promise<void> {
-    try {
-      await browser.storage.sync.clear();
-      await this.updateOptions();
-    } catch (errorAny) {
-      const error = errorAny as Error;
-      this.options.errors = [error.message];
-    }
+    return this.queueOptions(() => browser.storage.sync.clear());
   }
 
   updateTabsAfterOptionsChange(): void {

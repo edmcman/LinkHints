@@ -20,6 +20,7 @@
     "types": ["firefox-webext-browser", "node"],
     "lib": [
       "ES2020",
+      "ES2021.WeakRef",
       "DOM",
       "DOM.Iterable"
     ]

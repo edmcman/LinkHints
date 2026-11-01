@@ -235,6 +235,7 @@ type ShadowRootData = {
   mutationObserver: MutationObserver;
   resets: Resets;
   active: boolean;
+  reference: WeakRef<ShadowRootData>;
 };
 
 type Deadline = { timeRemaining: () => number };
@@ -262,6 +263,14 @@ export default class ElementManager {
 
   shadowRoots = new WeakMap<Element, ShadowRootData>();
 
+  activeShadowRoots = new Set<WeakRef<ShadowRootData>>();
+
+  shadowRootFinalizer = new FinalizationRegistry<WeakRef<ShadowRootData>>(
+    (reference) => this.activeShadowRoots.delete(reference)
+  );
+
+  lifecycleGeneration = 0;
+
   idleCallbackId: IdleCallbackID | undefined = undefined;
 
   secretElementResets = new Resets();
@@ -288,6 +297,7 @@ export default class ElementManager {
   }
 
   async start(): Promise<void> {
+    const generation = ++this.lifecycleGeneration;
     this.addWindowListeners();
 
     this.injectScript();
@@ -298,6 +308,9 @@ export default class ElementManager {
     // MutationObserver has been started, queue all elements and frames added
     // before the observer was running.
     await tMeta.loaded;
+    if (generation !== this.lifecycleGeneration) {
+      return;
+    }
 
     mutationObserve(this.mutationObserver, document);
 
@@ -322,6 +335,7 @@ export default class ElementManager {
   }
 
   stop(): void {
+    this.lifecycleGeneration += 1;
     if (this.idleCallbackId !== undefined) {
       cancelIdleCallback(this.idleCallbackId);
     }
@@ -329,6 +343,13 @@ export default class ElementManager {
     this.frameIntersectionObserver.disconnect();
     this.mutationObserver.disconnect();
     this.removalObserver.disconnect();
+    for (const reference of this.activeShadowRoots) {
+      const root = reference.deref();
+      if (root !== undefined) {
+        this.deactivateShadowRoot(root);
+      }
+    }
+    this.activeShadowRoots.clear();
     this.queue = makeEmptyQueue();
     this.injectedHasQueue = false;
     this.injectedListeners = new Map<string, Array<() => unknown>>();
@@ -646,18 +667,23 @@ export default class ElementManager {
         this.injectedHasQueue = message.hasQueue;
         break;
 
-      case "DocumentWrite":
+      case "DocumentWrite": {
+        const generation = this.lifecycleGeneration;
         // This is triggered from a pre-hook; wait for the original method
         // (`document.open()` or `document.write()`) to be called before
         // re-adding listeners (since those methods clear the listeners).
         fireAndForget(
           Promise.resolve().then(() => {
+            if (generation !== this.lifecycleGeneration) {
+              return;
+            }
             this.addWindowListeners();
             this.onDocumentWriteExternal();
           }),
           "ElementManager#onInjectedMessage DocumentWrite"
         );
         break;
+      }
     }
   }
 
@@ -694,12 +720,19 @@ export default class ElementManager {
 
     mutationObserve(mutationObserver, shadowRoot);
 
-    this.shadowRoots.set(shadowRoot.host, {
+    const root: ShadowRootData = {
       shadowRoot,
       mutationObserver,
       resets,
       active: true,
-    });
+      get reference() {
+        return reference;
+      },
+    };
+    const reference = new WeakRef(root);
+    this.shadowRoots.set(shadowRoot.host, root);
+    this.activeShadowRoots.add(reference);
+    this.shadowRootFinalizer.register(root, reference, reference);
 
     // Note that when shadow roots are brand new (just created by
     // `.attachShadow`), `childNodes` is always empty since the page hasn’t had
@@ -726,6 +759,8 @@ export default class ElementManager {
   // `this.shadowRoots` is a `WeakMap`, items should disappear from it
   // automatically as the host elements are garbage collected.
   deactivateShadowRoot(root: ShadowRootData): void {
+    this.activeShadowRoots.delete(root.reference);
+    this.shadowRootFinalizer.unregister(root.reference);
     root.mutationObserver.disconnect();
     root.resets.reset();
     root.active = false;

@@ -431,3 +431,104 @@ test("preserves frame hints and tracks removed frames after restart", async ({
     await server.close();
   }
 });
+
+test("detached shadow hosts remain collectible while the worker runs", async ({
+  context,
+}) => {
+  const server = await serve((_url, response) => {
+    response.end("<main></main>");
+  });
+  try {
+    const page = await context.newPage();
+    await prepare(page, await backgroundFor(context), `${server.url}/`);
+    const registered = page.waitForEvent("console", {
+      predicate: (message) =>
+        message.text().includes("ElementManager#onClosedShadowRootCreated"),
+    });
+    await page.evaluate(() => {
+      const host = document.createElement("div");
+      host.attachShadow({ mode: "closed" });
+      Object.assign(window, { detachedHost: new WeakRef(host) });
+    });
+    await Promise.all(
+      (await registered).args().map(async (arg) => {
+        await arg.dispose();
+      })
+    );
+    const session = await context.newCDPSession(page);
+    // Console inspection retains logged DOM nodes independently of the extension.
+    await session.send("Runtime.discardConsoleEntries");
+    await expect
+      .poll(async () => {
+        await session.send("HeapProfiler.collectGarbage");
+        return page.evaluate(
+          () =>
+            (
+              window as unknown as { detachedHost: WeakRef<Element> }
+            ).detachedHost.deref() === undefined
+        );
+      })
+      .toBe(true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("removing an announced frame completes collection without its report", async ({
+  context,
+}) => {
+  const server = await serve((url, response) => {
+    response.end(
+      url.startsWith("/frame")
+        ? '<a href="#frame">Frame target</a>'
+        : '<a href="#top">Top target</a><iframe src="/frame"></iframe>'
+    );
+  });
+  try {
+    const page = await context.newPage();
+    const background = await backgroundFor(context);
+    const url = `${server.url}/`;
+    await prepare(page, background, url);
+    await expect(
+      page.frameLocator("iframe").getByText("Frame target")
+    ).toBeVisible();
+    await background.evaluate(async (pageUrl) => {
+      const api = (globalThis as unknown as { chrome: typeof browser }).chrome;
+      const [tab] = await api.tabs.query({ url: pageUrl });
+      await api.scripting.executeScript({
+        target: { tabId: tab.id as number, allFrames: true },
+        func: () => {
+          if (window === window.top) {
+            return;
+          }
+          const send = browser.runtime.sendMessage.bind(browser.runtime);
+          browser.runtime.sendMessage = (message: unknown) =>
+            (message as { message?: { type?: string } }).message?.type ===
+            "ReportVisibleElements"
+              ? Promise.resolve()
+              : send(message);
+        },
+      });
+    }, url);
+    await page.keyboard.press("Alt+j");
+    await expect
+      .poll(
+        async () =>
+          (
+            await savedState(background, url)
+          )?.hintsState?.pendingElements?.pendingFrames.collecting
+      )
+      .toBe(1);
+    await page.locator("iframe").evaluate((frame) => {
+      frame.remove();
+    });
+    await expect(
+      page.locator("#__LinkHintsWebExt .hint:not(.shruggie)")
+    ).toHaveCount(1);
+    await expect
+      .poll(async () => (await savedState(background, url))?.hintsState?.type)
+      .toBe("Hinting");
+  } finally {
+    await server.close();
+  }
+});

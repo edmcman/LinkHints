@@ -61,6 +61,8 @@ export default class RendererProgram {
 
   enteredText = "";
 
+  renderGeneration = 0;
+
   resets = new Resets();
 
   port: browser.runtime.Port | undefined = undefined;
@@ -148,7 +150,13 @@ export default class RendererProgram {
     };
   }
 
+  lifecycleGeneration = 0;
+
+  running = false;
+
   async start(): Promise<void> {
+    const generation = ++this.lifecycleGeneration;
+    this.running = true;
     // This is useful during development. If reloading the extension during
     // hints mode, the old hints will be removed as soon as the new version
     // starts.
@@ -192,31 +200,37 @@ export default class RendererProgram {
       return;
     }
 
-    this.connect();
+    if (generation === this.lifecycleGeneration) {
+      this.connect();
+    }
   }
 
   connect(): void {
-    if (this.port !== undefined) {
+    if (!this.running || this.port !== undefined) {
       return;
     }
-    const port = browser.runtime.connect();
+    const port = browser.runtime.connect({ name: "renderer" });
     this.port = port;
     port.onDisconnect.addListener(() => {
       if (this.port === port) {
         this.port = undefined;
-        onInvalidated(
-          () => {
-            this.stop();
-          },
-          () => {
-            this.connect();
-          }
+        this.resets.add(
+          onInvalidated(
+            () => {
+              this.stop();
+            },
+            () => {
+              this.connect();
+            }
+          )
         );
       }
     });
   }
 
   stop(): void {
+    this.running = false;
+    this.lifecycleGeneration += 1;
     log("log", "RendererProgram#stop");
     this.resets.reset();
     const { port } = this;
@@ -412,6 +426,7 @@ export default class RendererProgram {
 
     time.start("prepare");
     this.unrender();
+    const generation = this.renderGeneration;
     const viewport = getViewport();
     const { root, shadowRoot } = this.container;
 
@@ -535,6 +550,9 @@ export default class RendererProgram {
 
     time.start("waitUntilBeforeNextRepaint 1");
     await waitUntilBeforeNextRepaint();
+    if (generation !== this.renderGeneration) {
+      return;
+    }
     const firstPaintTimestamp = Date.now();
 
     time.start("move inside 2");
@@ -542,6 +560,9 @@ export default class RendererProgram {
     // more (but not a full ~16ms frame) to let the hints appear on screen
     // before moving the remaining hints.
     await wait0();
+    if (generation !== this.renderGeneration) {
+      return;
+    }
     const moved = this.moveInsideViewport(restElements, viewport);
 
     // Only measure the next paint if we actually moved any hints inside the
@@ -553,6 +574,10 @@ export default class RendererProgram {
     }
 
     const lastPaintTimestamp = Date.now();
+
+    if (generation !== this.renderGeneration) {
+      return;
+    }
 
     this.sendMessage({
       type: "Rendered",
@@ -726,6 +751,7 @@ export default class RendererProgram {
   }
 
   unrender(): void {
+    this.renderGeneration += 1;
     this.hints = [];
     this.rects.clear();
 
