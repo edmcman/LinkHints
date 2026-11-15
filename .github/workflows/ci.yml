@@ -37,17 +37,15 @@ jobs:
       - name: Build signed extension and feed
         env:
           CHROME_KEY_PEM: ${{ secrets.CHROME_KEY_PEM }}
-          CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -eu
           test -n "$CHROME_KEY_PEM"
-          test -n "$CHROME_EXTENSION_ID"
           mkdir -p dist-chrome
           trap 'rm -f dist-chrome/key.pem' EXIT
           umask 077
           printf '%s' "$CHROME_KEY_PEM" | base64 --decode > dist-chrome/key.pem
-          test "$(node scripts/publish-chrome.cjs id dist-chrome/key.pem)" = "$CHROME_EXTENSION_ID"
+          CHROME_EXTENSION_ID="$(node scripts/publish-chrome.cjs id dist-chrome/key.pem)"
           export CHROME_BUILD_VERSION="$(node scripts/publish-chrome.cjs version "$RUN_NUMBER")"
           npm run build:chrome
           node scripts/publish-chrome.cjs publish dist-chrome/key.pem "$CHROME_EXTENSION_ID" "$RUN_NUMBER"
