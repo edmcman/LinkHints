@@ -22,8 +22,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22.x
       - run: npm ci
@@ -55,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_SHA: ${{ github.sha }}
         run: test "$(gh api repos/${{ github.repository }}/git/ref/heads/main --jq .object.sha)" = "$EXPECTED_SHA"
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: compiled-docs
       - name: Deploy to GitHub Pages
@@ -67,16 +67,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v5
         with:
           node-version: 22.x
 
       - name: Cache node_modules
         id: cache-node_modules
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: node_modules
           key: node_modules-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -115,23 +115,23 @@ jobs:
         browser: [chromium, firefox]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v5
         with:
           node-version: 22.x
 
       - name: Cache node_modules
         id: cache-node_modules
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: node_modules
           key: node_modules-${{ hashFiles('package.json', 'package-lock.json') }}
 
       - name: Cache Playwright browsers
         id: cache-playwright
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ matrix.browser }}-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -147,7 +147,7 @@ jobs:
 
       - name: Cache apt packages
         id: cache-apt
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: /var/cache/apt/archives
           key: apt-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
