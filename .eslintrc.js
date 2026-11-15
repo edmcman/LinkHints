@@ -256,7 +256,7 @@ module.exports = {
       },
     },
     {
-      files: ["rollup.config.js"],
+      files: ["rollup.config.js", "web-ext-config.mjs"],
       parserOptions: {
         sourceType: "module",
       },

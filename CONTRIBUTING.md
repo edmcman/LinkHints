@@ -10,7 +10,7 @@ If you’d like to make a pull request, here’s what you need to know.
 
 ## Requirements
 
-- [Node.js] 18 with npm 8.
+- [Node.js] 26 with npm 11.
 - Latest [Chrome] or [Chromium].
 - Latest [Firefox Developer Edition] or [Firefox Nightly].
 
@@ -49,7 +49,10 @@ These directories are generated and gitignored:
 The most important files:
 
 - `project.config.ts` contains information about the whole project, all in one place. Other config files and build scripts read from it. For example, it maps entrypoint files in `src/` to output files in `compiled-<browser>/`.
-- `rollup.config.js` defines how `compiled-<browser>/` is made. Rollup compiles and bundles JavaScript; generates `manifest.json`, HTML files and SVG icons; copies the [WebExtension Polyfill], CSS files, and PNG icons; and defines a couple of global variables (see also `@types/globals.d.ts`).
+- # `rollup.config.js` defines how `compiled-<browser>/` is made. Rollup compiles and bundles JavaScript; generates `manifest.json`, HTML files and SVG icons; copies the [WebExtension Polyfill], CSS files, and PNG icons; and defines a couple of global variables (see also `@types/globals.d.ts`).
+- `project.config.ts` contains information about the whole project, all in one place. Other config files and build scripts read from it. For example, it maps entrypoint files in `src/` to output files in `compiled/`.
+- `rollup.config.js` defines how `compiled/` is made. Rollup compiles and bundles JavaScript; generates `manifest.json`, HTML files and SVG icons; copies the [WebExtension Polyfill], CSS files, and PNG icons; and defines a couple of global variables (see also `@types/globals.d.ts`).
+  > > > > > > > upstream/main
 - `web-ext-config.mjs` configures [web-ext], both for building and for running.
 - `custom.config.example.cjs` can be copied into `custom.config.cjs` to customize `web-ext run` as well as default options for development.
 - `src/manifest.ts` is called via Rollup and generates `manifest.json`. In fact, all `.ts` files directly inside `src/` are called via Rollup and generate other files.

@@ -16,6 +16,8 @@ const entries = {
     "area-decimals/vertical.html",
     "contenteditable/index.html",
     "heavy-dom/index.html",
+    "google-search-result/index.html",
+    "webkit-scrollbar/index.html",
     "hint-position/index.html",
     "labels/index.html",
     "link-monster/index.html",
@@ -112,6 +114,19 @@ test.describe("stable html regressions", () => {
     await selectHint(page, labels[0] ?? "");
     await expect.poll(() => page.url()).not.toBe(before);
     expect(page.url()).toContain("#selected");
+  });
+
+  test("Backspace exits hints when no text was entered", async ({
+    context,
+    html,
+  }) => {
+    const page = await context.newPage();
+    await openAndHint(page, html.url("__regression_select.html"));
+    await page.keyboard.press("Backspace");
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#__LinkHintsWebExt")?.shadowRoot === undefined
+    );
   });
 
   test("attribute changes refresh the target set", async ({

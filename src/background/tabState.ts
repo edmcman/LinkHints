@@ -83,5 +83,6 @@ export const TabState = fieldsAuto({
   perf: Perf,
   isOptionsPage: boolean,
   isPinned: boolean,
+  isIncognito: optional(boolean),
   rendererFrameId: optional(number),
 });

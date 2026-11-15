@@ -4,10 +4,7 @@ require("sucrase/register/ts");
 const { resolve } = require("node:path");
 const { createInstance } = require("addons-linter");
 
-const allowedWarnings = new Set([
-  "MISSING_DATA_COLLECTION_PERMISSIONS",
-  "UNSAFE_VAR_ASSIGNMENT",
-]);
+const allowedWarnings = new Set(["UNSAFE_VAR_ASSIGNMENT"]);
 
 async function lint() {
   const configPath = "../web-ext-config.mjs";
@@ -56,14 +53,21 @@ async function lint() {
   });
 
   const { errors, warnings } = await linter.run();
-  const rejectedWarnings = warnings.filter(
-    ({ code }) => !allowedWarnings.has(code)
-  );
+  const allowed = ({ code, description }) =>
+    allowedWarnings.has(code) ||
+    ([
+      "KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION",
+      "KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION",
+    ].includes(code) &&
+      description.includes(
+        '"browser_specific_settings.gecko.data_collection_permissions"'
+      ));
+  const rejectedWarnings = warnings.filter((warning) => !allowed(warning));
 
   for (const warning of warnings) {
     const { code, file, line, message } = warning;
     const location = file ? `${file}${line ? `:${line}` : ""}: ` : "";
-    const allowance = allowedWarnings.has(code) ? " (allowlisted)" : "";
+    const allowance = allowed(warning) ? " (allowlisted)" : "";
     console.log(`${code}${allowance}: ${location}${message}`);
   }
 

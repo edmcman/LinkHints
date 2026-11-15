@@ -134,3 +134,13 @@ test("validates keyboard modes and renderer frame IDs", () => {
   const state = TabState(saved(states.Idle));
   expect(state.rendererFrameId).toBeUndefined();
 });
+
+test("restores private-window state and accepts older saved states", () => {
+  expect(
+    TabState({ ...saved(states.Idle), isIncognito: true }).isIncognito
+  ).toBe(true);
+  expect(TabState(saved(states.Idle)).isIncognito).toBeUndefined();
+  expect(() =>
+    TabState({ ...saved(states.Idle), isIncognito: "yes" })
+  ).toThrow();
+});
