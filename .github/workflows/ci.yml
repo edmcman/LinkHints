@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.run_attempt != 1 && github.run_id || 'first-attempt' }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
 permissions:
   contents: read
   pages: write
@@ -11,43 +15,51 @@ permissions:
 
 jobs:
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    needs: [check, test]
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
-
-      - name: Use Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: 22.x
-
-      - name: Cache node_modules
-        id: cache-node_modules
-        uses: actions/cache@v3
-        with:
-          path: node_modules
-          key: node_modules-${{ hashFiles('package.json', 'package-lock.json') }}
-
-      - name: npm ci
-        if: steps.cache-node_modules.outputs.cache-hit != 'true'
-        run: npm ci
-
-      - name: npm test
-        run: npm test
-
+      - run: npm ci
       - name: Setup Pages
+        id: pages
         uses: actions/configure-pages@v2
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Check Pages URL
+        env:
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
+        run: test "${PAGES_URL%/}" = "https://edmcman.github.io/LinkHints"
+      - name: Build signed extension and feed
+        env:
+          CHROME_KEY_PEM: ${{ secrets.CHROME_KEY_PEM }}
+          CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -eu
+          test -n "$CHROME_KEY_PEM"
+          test -n "$CHROME_EXTENSION_ID"
+          mkdir -p dist-chrome
+          trap 'rm -f dist-chrome/key.pem' EXIT
+          umask 077
+          printf '%s' "$CHROME_KEY_PEM" | base64 --decode > dist-chrome/key.pem
+          test "$(node scripts/publish-chrome.cjs id dist-chrome/key.pem)" = "$CHROME_EXTENSION_ID"
+          export CHROME_BUILD_VERSION="$(node scripts/publish-chrome.cjs version "$RUN_NUMBER")"
+          npm run build:chrome
+          node scripts/publish-chrome.cjs publish dist-chrome/key.pem "$CHROME_EXTENSION_ID" "$RUN_NUMBER"
+          chmod -R a+rX compiled-docs
+      - name: Verify branch head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(gh api repos/${{ github.repository }}/git/ref/heads/main --jq .object.sha)" = "$EXPECTED_SHA"
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: compiled-docs
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v1
@@ -75,20 +87,15 @@ jobs:
         if: steps.cache-node_modules.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Install Chrome key if available
-        run: |
-          if [ -n "${{ secrets.CHROME_KEY_PEM }}" ]; then
-            mkdir -p dist-chrome
-            printf '%s' "${{ secrets.CHROME_KEY_PEM }}" | base64 --decode > dist-chrome/key.pem
-            chmod 600 dist-chrome/key.pem
-          fi
+      - name: Distribution tests
+        run: node --test scripts/publish-chrome.test.cjs
 
       - name: npm test
         run: npm test
 
-      - name: Remove keys
+      - name: Remove generated key
         if: ${{ always() }}
-        run: rm -f dist-*/key.pem || true
+        run: rm -f dist-chrome/key.pem
 
       - name: Upload Chrome artifact
         uses: actions/upload-artifact@v6

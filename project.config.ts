@@ -43,7 +43,11 @@ export default {
     changelog: "https://github.com/lydell/LinkHints/issues/1",
     issues: "https://github.com/lydell/LinkHints/issues/",
     icon: mainIcon,
-    webExtBaseName: `link_hints-${VERSION}`,
+    webExtBaseName: `link_hints-${
+      currentBrowser === "chrome"
+        ? process.env.CHROME_BUILD_VERSION ?? VERSION
+        : VERSION
+    }`,
     geckoId: "linkhints@lydell.github.io",
   },
   prod: currentBrowser !== undefined && process.env.LINKHINTS_DEV !== "1",

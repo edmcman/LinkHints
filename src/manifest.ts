@@ -7,7 +7,14 @@ type IconSizes = Record<string, string>;
 export default (): string =>
   toJSON({
     manifest_version: 3,
-    version: config.meta.version,
+    version:
+      config.browser === "chrome"
+        ? process.env.CHROME_BUILD_VERSION ?? config.meta.version
+        : config.meta.version,
+    update_url:
+      config.browser === "chrome"
+        ? "https://edmcman.github.io/LinkHints/update.xml"
+        : undefined,
     name: config.meta.name,
     author: config.meta.author,
     description: config.meta.description,
